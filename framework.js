@@ -57,12 +57,12 @@ function getClientVariables() {
 }
 
 var webServer = http.createServer(function(request,response){
-    var clienthead = fs.readFileSync("./clienthead", "utf8");
+    var clienthead = fs.readFileSync("./framework/clienthead", "utf8");
     var variables = getClientVariables();
-    var clientbody = fs.readFileSync("./client.js", "utf8");
-    var aesjs = fs.readFileSync("./crypto/aes.js", "utf8");
-    var aesctrjs = fs.readFileSync("./crypto/aes-ctr.js", "utf8");
-    var sha1js = fs.readFileSync("./crypto/sha1.js", "utf8");
+    var clientbody = fs.readFileSync("./framework/client.js", "utf8");
+    var aesjs = fs.readFileSync("./framework/crypto/aes.js", "utf8");
+    var aesctrjs = fs.readFileSync("./framework/crypto/aes-ctr.js", "utf8");
+    var sha1js = fs.readFileSync("./framework/crypto/sha1.js", "utf8");
     var sendable = clienthead + variables + clientbody + aesjs + aesctrjs + sha1js + "</script></body></html>";
     response.writeHeader(200, { "Content-Type": "text/html",
                                 "X-Frame-Options": "deny",
