@@ -1,0 +1,33 @@
+{
+  "name": "framework",
+  "description": "WebGUI framework with encrypted messaging",
+  "keywords": [
+    "WebGUI", "Framework", "AES"
+  ],
+  "version": "0.0.1",
+  "homepage": "http://www.swagman.org/",
+  "author": {
+    "name": "Jussi Ohenoja",
+    "email": "juice@swagman.org",
+    "url": "https://github.com/juiceme/framework.git"
+  },
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/juiceme/framework.git"
+  },
+  "bugs": {
+    "url": "http://github.com/juiceme/framework/issues"
+  },
+  "devDependencies": {
+  },
+  "dependencies": {
+    "websocket": "=1.0.22"
+  },
+  "scripts": {
+    "install": "git submodule init; git submodule update"
+  },
+  "engine": [
+    "node >= v0.10.0"
+  ]
+}
