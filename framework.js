@@ -321,7 +321,7 @@ function processGainAdminMode(cookie, content) {
 			 [ createUiTextArea("email", u.email, 30) ],
 			 [ createUiTextArea("phone", u.phone, 15) ],
 			 userPriviliges,
-		         [ createUiButton("Vaihda", "changeUserPassword", u.username),
+		         [ createUiButton("Change", "changeUserPassword", u.username),
 			   createUiInputField("password", "", true) ] ] )
 	});
 
@@ -329,10 +329,15 @@ function processGainAdminMode(cookie, content) {
 	priviligeList.forEach(function(p) {
 	    emptyPriviligeList.push(createUiCheckBox(p.privilige, false, p.code));
 	});
+        var priviligeCodes = "";
+        runCallbacByName("createAdminPanelUserPriviliges").forEach(function(p) {
+            priviligeCodes = priviligeCodes + p.code + " / ";
+        });
+        priviligeCodes = priviligeCodes.slice(0, priviligeCodes.length-3);
 	var itemList = { title: "User Admin Data",
 			 frameId: 0,
 			 header: [ { text: "username" }, { text: "realname" }, { text: "email" },
-				   { text: "phone" }, { text: "V / S / Te / Pe / To / A" }, { text: "Vaihda Salasana" } ],
+				   { text: "phone" }, { text: priviligeCodes }, { text: "Change Password" } ],
 			 items: items,
 			 newItem: [ [ createUiTextArea("username", "<username>") ],
 				    [ createUiTextArea("realname", "<realname>", 25) ],

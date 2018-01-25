@@ -271,14 +271,14 @@ function createEditTableItem(id, count, inputData, item, frameId, lastRow) {
     var lastCell = document.createElement('td');
     if(lastRow) {
 	var addButton = document.createElement("button");
-	addButton.appendChild(document.createTextNode("Luo uusi"));
+	addButton.appendChild(document.createTextNode("Create"));
 	addButton.id = count;
 	addButton.frameId = frameId;
 	addButton.onclick = function() { createNewItemToList(inputData, this); }
 	lastCell.appendChild(addButton);
     } else {
 	var deleteButton = document.createElement("button");
-	deleteButton.appendChild(document.createTextNode("Poista"));
+	deleteButton.appendChild(document.createTextNode("Delete"));
 	deleteButton.id = count;
 	deleteButton.frameId = frameId;
 	deleteButton.onclick = function() { deleteItemFromList(inputData, this); }
@@ -642,7 +642,7 @@ function createLoginView() {
     passwordField.type="password";
 
     hCell.colSpan = "2";
-    hCell.appendChild(document.createTextNode(uiText("Kirjaudu sisään turnaustilastooon")));
+    hCell.appendChild(document.createTextNode(uiText("Please Login")));
     hRow.appendChild(hCell);
     setElementStyle(hCell);
     tHeader.appendChild(hRow);
@@ -660,13 +660,13 @@ function createLoginView() {
     setElementStyle(bCell5b);
 
     bCell1a.appendChild(document.createTextNode(" "));
-    bCell2a.appendChild(document.createTextNode(uiText("Käyttäjä") + ": "));
+    bCell2a.appendChild(document.createTextNode(uiText("User") + ": "));
     bCell2b.appendChild(usernameField);
-    bCell3a.appendChild(document.createTextNode("Salasana" + ": "));
+    bCell3a.appendChild(document.createTextNode("Password" + ": "));
     bCell3b.appendChild(passwordField);
     bCell4a.appendChild(document.createTextNode(" "));
 
-    loginButton.appendChild(document.createTextNode("Kirjaudu"));
+    loginButton.appendChild(document.createTextNode("Login"));
     loginButton.onclick = function() { sendLogin(usernameField.value, passwordField.value); }
 
     bCell5a.appendChild(loginButton);
