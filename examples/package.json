@@ -25,7 +25,7 @@
     "websocket": "=1.0.22"
   },
   "scripts": {
-    "install": "git submodule add https://github.com/juiceme/framework.git; git submodule add https://github.com/juiceme/datastorage.git; git submodule init; git submodule update; cd framework; npm install"
+    "install": "git submodule add https://github.com/juiceme/datastorage.git; git submodule init; git submodule update; cd ..; npm install"
   },
   "engine": [
     "node >= v0.10.0"
