@@ -1,9 +1,3 @@
 [submodule "crypto"]
 	path = crypto
 	url = https://github.com/juiceme/crypto.git
-[submodule "examples/framework"]
-	path = examples/framework
-	url = https://github.com/juiceme/framework.git
-[submodule "examples/datastorage"]
-	path = examples/datastorage
-	url = https://github.com/juiceme/datastorage.git
