@@ -1,5 +1,5 @@
 var framework = require("./framework/framework.js");
-var datastorage = require('./datastorage/datastorage.js');
+var datastorage = require('./framework/datastorage/datastorage.js');
 
 
 // Application specific part starts from here
