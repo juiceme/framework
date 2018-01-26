@@ -295,8 +295,32 @@ function createUiButton(text, callbackMessage, data, active) {
 }
 
 function createUiInputField(key, value, password) {
-    if(password  === undefined) { password = false; }
+    if(password === undefined) { password = false; }
     return { itemType: "input", key: key, value: value, password: password };
+}
+
+function createTopButtons(cookie, adminRequest) {
+    if(adminRequest === undefined) { adminRequest = false; }
+    var id = 101;
+    var topButtonList = [ { id: id++, text: "Log Out", callbackMessage: "clientStarted" } ];
+    runCallbacByName("createTopButtonList", cookie).forEach(function(b) {
+	var flag = false; 
+	b.priviliges.forEach(function(p) {
+	    if(userHasPrivilige(p, cookie.user)) { flag = true; }
+	});
+	if(flag) {
+	    b.button.id = id++;
+	    topButtonList.push(b.button);
+	}
+    });
+    if(userHasPrivilige("system-admin", cookie.user)) {
+	if(adminRequest) {
+	    topButtonList.push( { id: id++, text: "User Mode", callbackMessage: "resetToMain" } );
+	} else {
+	    topButtonList.push( { id: id++, text: "Admin Mode", callbackMessage: "gainAdminMode" } );
+	}
+    }
+    return topButtonList;
 }
 
 
@@ -554,6 +578,7 @@ module.exports.createUiCheckBox = createUiCheckBox;
 module.exports.createUiSelectionList = createUiSelectionList;
 module.exports.createUiButton = createUiButton;
 module.exports.createUiInputField = createUiInputField;
+module.exports.createTopButtons = createTopButtons;
 module.exports.sendCipherTextToClient = sendCipherTextToClient;
 module.exports.servicelog = servicelog;
 module.exports.setStatustoClient = setStatustoClient;

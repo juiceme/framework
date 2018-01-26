@@ -9,21 +9,25 @@ function handleApplicationMessage(cookie, decryptedMessage) {
         processResetToMainState(cookie, decryptedMessage.content); }
     if(decryptedMessage.type === "pushMeButtonAction") {
         processPushMeButtonAction(cookie, decryptedMessage.content); }
+    if(decryptedMessage.type === "getHelpMessage") {
+        processGetHelpMessage(cookie, decryptedMessage.content); }
 }
 
 
-// Top button panel, always visible
+// Administration UI panel requires application to provide needed priviliges
 
-function createTopButtonList(cookie, adminRequest) {
-    var topButtonList = [ { id: 101, text: "Logout", callbackMessage: "clientStarted" } ];
-    if(framework.userHasPrivilige("system-admin", cookie.user)) {
-        if(adminRequest) {
-	    topButtonList.push( { id: 104, text: "User Mode", callbackMessage: "resetToMain" } );
-	} else {
-	    topButtonList.push( { id: 104, text: "Admin Mode", callbackMessage: "gainAdminMode" } );
-	}
-    }
-    return topButtonList;
+function createAdminPanelUserPriviliges() {
+    return [ { privilige: "view", code: "v" },
+	     { privilige: "system-admin", code: "a"} ];
+}
+
+
+// Define the top button panel, always visible.
+// The panel automatically contains "Logout" and "Admin Mode" buttons so no need to include those.
+
+function createTopButtonList(cookie) {
+    return [ { button: { text: "Help", callbackMessage: "getHelpMessage" },
+	       priviliges: [ "view" ] } ];
 }
 
 
@@ -57,14 +61,9 @@ function processPushMeButtonAction(cookie, data) {
     framework.servicelog("received pushMeButtonAction message");
 }
 
-
-// Administration UI panel requires application to provide needed priviliges
-
-function createAdminPanelUserPriviliges() {
-    return [ { privilige: "view", code: "v" },
-	     { privilige: "system-admin", code: "a"} ];
+function processGetHelpMessage(cookie, data) {
+    framework.servicelog("received getHelpMessage message");
 }
-
 
 // Initialize datastorage
 
