@@ -78,8 +78,10 @@ function handleIncomingMessage(defragmentedMessage) {
     }
 
     if(defragmentedMessage.type == "unpriviligedLogin") {
+	var div = document.createElement('div');
+	div.id = "myDiv2";
 	document.body.replaceChild(createTopButtons(defragmentedMessage.content), document.getElementById("myDiv1"));
-	document.body.replaceChild(document.createElement("div"), document.getElementById("myDiv2"));
+	document.body.replaceChild(div, document.getElementById("myDiv2"));
     }
 
     if(defragmentedMessage.type == "showTournament") {
@@ -557,7 +559,7 @@ function getTypedObjectTemplateById(item, fullData) {
 
 
 function sendLogin(username, password) {
-    div = document.createElement('div');
+    var div = document.createElement('div');
     div.id = "myDiv2";
     document.body.replaceChild(div, document.getElementById("myDiv2"));
     sessionPassword = Sha1.hash(password + Sha1.hash(username).slice(0,4));
