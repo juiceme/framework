@@ -247,7 +247,7 @@ function processLoginResponse(cookie, content) {
 	    // for unpriviliged login, only send logout button and nothing more
 	    sendable = { type: "unpriviligedLogin",
 			 content: { topButtonList: [ { id: 100,
-						       text: "Kirjaudu Ulos",
+						       text: "Log Out",
 						       callbackMessage: "clientStarted" } ] } };
 
 	    sendCipherTextToClient(cookie, sendable);
