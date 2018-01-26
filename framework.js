@@ -331,7 +331,7 @@ function processGainAdminMode(cookie, content) {
     if(userHasPrivilige("system-admin", cookie.user)) {
 	servicelog("Granting Sytem Administration priviliges to user " + cookie.user.username);
 	var sendable;
-	var topButtonList =  runCallbacByName("createTopButtonList", cookie, true);
+	var topButtonList =  createTopButtons(cookie, true);
 
 	var items = [];
 	var priviligeList = runCallbacByName("createAdminPanelUserPriviliges");

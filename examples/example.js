@@ -43,7 +43,7 @@ function processResetToMainState(cookie, content) {
 }
 
 function sendMainUiPanel(cookie) {
-    var topButtonList =  createTopButtonList(cookie, false);
+    var topButtonList = framework.createTopButtons(cookie);
     var itemList = { title: "Main UI Panel",
                      frameId: 0,
                      header: [ { text: "" }, { text: "" }, { text: "" } ],
