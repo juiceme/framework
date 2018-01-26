@@ -330,9 +330,7 @@ function processGainAdminMode(cookie, content) {
     servicelog("Client #" + cookie.count + " requests Sytem Administration priviliges");
     if(userHasPrivilige("system-admin", cookie.user)) {
 	servicelog("Granting Sytem Administration priviliges to user " + cookie.user.username);
-	var sendable;
 	var topButtonList =  createTopButtons(cookie, true);
-
 	var items = [];
 	var priviligeList = runCallbacByName("createAdminPanelUserPriviliges");
 	runCallbacByName("datastorageRead", "users").users.forEach(function(u) {
@@ -348,7 +346,6 @@ function processGainAdminMode(cookie, content) {
 		         [ createUiButton("Change", "changeUserPassword", u.username),
 			   createUiInputField("password", "", true) ] ] )
 	});
-
 	var emptyPriviligeList = [];
 	priviligeList.forEach(function(p) {
 	    emptyPriviligeList.push(createUiCheckBox(p.privilige, false, p.code));
@@ -369,20 +366,14 @@ function processGainAdminMode(cookie, content) {
 				    [ createUiTextArea("phone", "<phone>", 15) ],
 				    emptyPriviligeList,
 				    [ createUiTextNode("password", "") ] ] };
-
 	var frameList = [ { frameType: "editListFrame", frame: itemList } ];
-
-	sendable = { type: "createUiPage",
-		     content: { user: cookie.user.username,
-				priviliges: cookie.user.applicationData.priviliges,
-				topButtonList: topButtonList,
-				frameList: frameList,
-				buttonList: [ { id: 501, text: "OK", callbackMessage: "saveAdminData" },
-					      { id: 502, text: "Cancel",  callbackMessage: "resetToMain" } ] } };
-
+	var sendable = { type: "createUiPage",
+			 content: { topButtonList: topButtonList,
+				    frameList: frameList,
+				    buttonList: [ { id: 501, text: "OK", callbackMessage: "saveAdminData" },
+						  { id: 502, text: "Cancel",  callbackMessage: "resetToMain" } ] } };
 	sendCipherTextToClient(cookie, sendable);
 	servicelog("Sent NEW adminData to client #" + cookie.count);
-
     } else {
 	servicelog("User " + cookie.user.username + " does not have Sytem Administration priviliges!");
 	processClientStarted(cookie);
