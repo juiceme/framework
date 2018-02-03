@@ -205,7 +205,21 @@ function processClientStarted(cookie) {
     cookie.user = {};
     cookie.challenge = "";
     cookie.incomingMessageBuffer = "";
-    var sendable = { type: "loginView" }
+
+    var itemList = { title: "Please Login:",
+                     frameId: 0,
+                     header: [ { text: "" }, { text: "" } ],
+		     rowNumbers: false,
+                     items: [ [ [ createUiTextNode("username", "Username:") ],
+                                [ createUiInputField("userNameInput", "", false) ] ],
+			      [ [ createUiTextNode("password", "Password:") ],
+				[ createUiInputField("passwordInput", "", true) ] ] ] };
+    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
+    var sendable = { type: "createUiPage",
+                     content: { frameList: frameList,
+				buttonList: [ { id: 501,
+						text: "Login",
+						callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); sendToServer('userLogin', { username: Sha1.hash(username) } );" } ] } };
     sendPlainTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Login");
 }

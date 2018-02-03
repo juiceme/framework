@@ -21,11 +21,13 @@ mySocket.onmessage = function (event) {
         document.getElementById("myStatusField").value = receivable.content;
     }
 
-    if(receivable.type == "loginView") {
+    // createUiPage is only ever called in plaintext when establishong login session
+    if(receivable.type == "createUiPage") {
 	var div1 = document.createElement("div");
 	document.body.replaceChild(div1, document.getElementById("myDiv1"));
 	div1.id = "myDiv1";
-	document.body.replaceChild(createLoginView(), document.getElementById("myDiv2"));
+	document.body.replaceChild(createUiPage(receivable.content),
+				   document.getElementById("myDiv2"));
 	clearTimeout(connectionTimerId);
     }
 
@@ -143,18 +145,19 @@ function createFixedItemList(id, inputData, frame) {
     cell.colSpan = frame.header.length + 2;
     cell.innerHTML = "<b>" + frame.title + "</b>";
     var hRow1 = tableHeader.insertRow();
-    hRow1.appendChild(document.createElement('td'));
+    if(frame.rowNumbers) { hRow1.appendChild(document.createElement('td')); }
     frame.header.forEach(function(h) {
 	var cell= hRow1.insertCell();
 	cell.innerHTML = "<b>" + h.text + "</b>";
 	hRow1.appendChild(cell);
     });
-    var count = 1;
+    var count = 0;
+    if(frame.rowNumbers) { count = 1; }
     frame.items.forEach(function(i) {
 	var newTableItem = createTableItem(id, count, inputData, i);
 	id = newTableItem.id;
 	tableBody.appendChild(newTableItem.tableRow);
-	count++;
+	if(frame.rowNumbers) { count++; }
     });
     table.appendChild(tableHeader);
     table.appendChild(tableBody);
@@ -226,14 +229,19 @@ function createAcceptButtons(inputData) {
 	var button = document.createElement('button');
 	button.appendChild(document.createTextNode(b.text));
 	button.id = b.id;
-	button.onclick = function() {
-	    var freshData = { user: inputData.user,
-			      priviliges: inputData.priviliges,
-			      items: refreshInputDataItems(inputData, false),
-			      buttonList: inputData.buttonList };
-	    sendToServerEncrypted(b.callbackMessage, freshData);
-	    return false;
-	};
+	if(b.callbackMessage != undefined) {
+	    button.onclick = function() {
+		var freshData = { user: inputData.user,
+				  priviliges: inputData.priviliges,
+				  items: refreshInputDataItems(inputData, false),
+				  buttonList: inputData.buttonList };
+		sendToServerEncrypted(b.callbackMessage, freshData);
+		return false;
+	    };
+	}
+	if(b.callbackFunction != undefined) {
+	    button.onclick = Function(b.callbackFunction);
+	}
 //	cell.appendChild(button);
 	tableRow.appendChild(button);
     });
@@ -245,8 +253,10 @@ function createTableItem(id, count, inputData, item) {
     var tableRow = document.createElement('tr');
     var cell = document.createElement('td');
 
-    cell.appendChild(document.createTextNode(count));
-    tableRow.appendChild(cell);
+    if(count != 0) {
+	cell.appendChild(document.createTextNode(count));
+	tableRow.appendChild(cell);
+    }
     item.forEach(function(c) {
 	var cell = document.createElement('td');
 	var newTypedObject = createTypedObject(id, c, inputData);
@@ -451,18 +461,23 @@ function createTypedObject(id, item, inputData) {
 	    newItem.id = id++;
 	    i.itemId = newItem.id;
 	    newItem.text = i.text;
-	    newItem.callbackMessage = i.callbackMessage;
 	    var button = document.createElement('button');
 	    if(!i.active) {
 		button.disabled = true;
 	    }
+	    if(i.callbackMessage != undefined) {
+		newItem.callbackMessage = i.callbackMessage;
+		button.onclick = function() { sendToServerEncrypted(i.callbackMessage,
+								    { buttonId: i.itemId,
+								      buttonData: i.data,
+								      items: refreshInputDataItems(inputData, false) });
+					      return false;
+					    };
+	    }
+	    if(i.callbackFunction != undefined) {
+		button.onclick = Function(i.callbackFunction);
+	    }
 	    button.appendChild(document.createTextNode(i.text));
-	    button.onclick = function() { sendToServerEncrypted(i.callbackMessage,
-								{ buttonId: i.itemId,
-								  buttonData: i.data,
-								  items: refreshInputDataItems(inputData, false) });
-					  return false;
-					};
 	    newItem.appendChild(button);
 	    newItemContainer.appendChild(newItem);
 	}
@@ -557,25 +572,6 @@ function getTypedObjectTemplateById(item, fullData) {
 // ---------- Utility helper functions
 
 
-
-function sendLogin(username, password) {
-    var div = document.createElement('div');
-    div.id = "myDiv2";
-    document.body.replaceChild(div, document.getElementById("myDiv2"));
-    sessionPassword = Sha1.hash(password + Sha1.hash(username).slice(0,4));
-    sendToServer("userLogin", { username: Sha1.hash(username) });
-//    console.log("SessionPassword = " + sessionPassword);
-}
-
-function uiText(text) {
-    return decodeURIComponent(escape(text));
-}
-
-function setElementStyle(element) {
-    element.style.border = "solid #ffffff";
-    element.style.padding = "0";
-}
-
 function sendToServer(type, content) {
     var sendable = { type: type, content: content };
     mySocket.send(JSON.stringify(sendable));
@@ -607,91 +603,4 @@ function sendToServerEncrypted(type, content) {
 	}
     }
 //    console.log("Sent " + originalLength + " bytes in " + count + " fragments to server");
-}
-
-
-// ---------- Login panel handling
-
-function createLoginView() {
-    var table = document.createElement('table');
-    var tHeader = document.createElement('thead');
-    var tBody = document.createElement('tbody');
-    var hRow = document.createElement('tr');
-    var hCell = document.createElement('td');
-    var bRow1 = document.createElement('tr');
-    var bCell1a = document.createElement('td');
-    var bCell1b = document.createElement('td');
-    var bRow2 = document.createElement('tr');
-    var bCell2a = document.createElement('td');
-    var bCell2b = document.createElement('td');
-    var bRow3 = document.createElement('tr');
-    var bCell3a = document.createElement('td');
-    var bCell3b = document.createElement('td');
-    var bRow4 = document.createElement('tr');
-    var bCell4a = document.createElement('td');
-    var bCell4b = document.createElement('td');
-    var bRow5 = document.createElement('tr');
-    var bCell5a = document.createElement('td');
-    var bCell5b = document.createElement('td');
-
-    var usernameField = document.createElement("input");
-    var passwordField = document.createElement("input");
-    var loginButton = document.createElement("button");
-
-    usernameField.name="username";
-    usernameField.type="text"
-    passwordField.name="password";
-    passwordField.type="password";
-
-    hCell.colSpan = "2";
-    hCell.appendChild(document.createTextNode(uiText("Please Login")));
-    hRow.appendChild(hCell);
-    setElementStyle(hCell);
-    tHeader.appendChild(hRow);
-    table.appendChild(tHeader);
-
-    bCell1a.style.border = "solid #ffffff";
-    bCell1b.style.border = "solid #ffffff";
-    setElementStyle(bCell2a);
-    setElementStyle(bCell2b);
-    setElementStyle(bCell3a);
-    setElementStyle(bCell3b);
-    bCell4a.style.border = "solid #ffffff";
-    bCell4b.style.border = "solid #ffffff";
-    setElementStyle(bCell5a);
-    setElementStyle(bCell5b);
-
-    bCell1a.appendChild(document.createTextNode(" "));
-    bCell2a.appendChild(document.createTextNode(uiText("User") + ": "));
-    bCell2b.appendChild(usernameField);
-    bCell3a.appendChild(document.createTextNode("Password" + ": "));
-    bCell3b.appendChild(passwordField);
-    bCell4a.appendChild(document.createTextNode(" "));
-
-    loginButton.appendChild(document.createTextNode("Login"));
-    loginButton.onclick = function() { sendLogin(usernameField.value, passwordField.value); }
-
-    bCell5a.appendChild(loginButton);
-
-    bRow1.appendChild(bCell1a);
-    bRow1.appendChild(bCell1b);
-    bRow2.appendChild(bCell2a);
-    bRow2.appendChild(bCell2b);
-    bRow3.appendChild(bCell3a);
-    bRow3.appendChild(bCell3b);
-    bRow4.appendChild(bCell4a);
-    bRow4.appendChild(bCell4b);
-    bRow5.appendChild(bCell5a);
-    bRow5.appendChild(bCell5b);
-
-    tBody.appendChild(bRow1);
-    tBody.appendChild(bRow2);
-    tBody.appendChild(bRow3);
-    tBody.appendChild(bRow4);
-    tBody.appendChild(bRow5);
-
-    table.appendChild(tBody);
-    table.id = "myDiv2";
-
-    return table;
 }
