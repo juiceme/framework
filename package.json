@@ -22,7 +22,8 @@
   "devDependencies": {
   },
   "dependencies": {
-    "websocket": "=1.0.22"
+    "websocket": "=1.0.22",
+    "emailjs": "=1.0.2"
   },
   "scripts": {
     "install": "git submodule init; git submodule update"

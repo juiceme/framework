@@ -49,7 +49,7 @@ function sendMainUiPanel(cookie) {
                      header: [ { text: "" }, { text: "" }, { text: "" } ],
                      items: [ [ [ framework.createUiTextNode("some text", "some text") ],
                                 [ framework.createUiTextNode("other text", "some text more") ],
-                                [ framework.createUiButton("push me", "pushMeButtonAction", 1) ] ] ] };
+                                [ framework.createUiMessageButton("push me", "pushMeButtonAction", 1) ] ] ] };
     var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
     var sendable = { type: "createUiPage",
                      content: { topButtonList: topButtonList,
@@ -86,6 +86,13 @@ datastorage.initialize("users", { users: [ { username: "test",
 					     realname: "",
 					     email: "",
 					     phone: "" } ] }, true);
+datastorage.initialize("pending", { pending: [] }, true);
+datastorage.initialize("email", { host: "smtp.your-email.com",
+				  user: "username",
+				  password: "password",
+				  sender: "you <username@your-email.com>",
+				  ssl: true,
+				  blindlyTrust: true });
 
 
 // Push callbacks to framework

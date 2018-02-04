@@ -1,6 +1,7 @@
 var websocket = require("websocket");
 var http = require("http");
 var fs = require("fs");
+var email = require("emailjs/email");
 var Aes = require('./crypto/aes.js');
 Aes.Ctr = require('./crypto/aes-ctr.js');
 var sha1 = require('./crypto/sha1.js');
@@ -107,6 +108,9 @@ wsServer.on('request', function(request) {
 
             if(type === "clientStarted") { processClientStarted(cookie); }
 	    if(type === "userLogin") { processUserLogin(cookie, content); }
+	    if(type === "createOrModifyAccount") { processCreateOrModifyAccount(cookie, content); }
+	    if(type === "accountRequestMessage") { processAccountRequestMessage(cookie, content); }
+	    if(type === "validateAccountMessage") { processValidateAccountMessage(cookie, content); }
 	    if(type === "loginResponse") { processLoginResponse(cookie, content); }
 	    if(type === "payload") {
 		try {
@@ -219,7 +223,10 @@ function processClientStarted(cookie) {
                      content: { frameList: frameList,
 				buttonList: [ { id: 501,
 						text: "Login",
-						callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); sendToServer('userLogin', { username: Sha1.hash(username) } );" } ] } };
+						callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); sendToServer('userLogin', { username: Sha1.hash(username) } ); return false;" },
+					      { id: 502,
+						text: "Create new account / Change passsword",
+						callbackFunction: "sessionPassword=''; sendToServer('createOrModifyAccount', {}); return false;" } ] } };
     sendPlainTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Login");
 }
@@ -276,6 +283,126 @@ function processLoginResponse(cookie, content) {
     }
 }
 
+function processCreateOrModifyAccount(cookie) {
+    var itemList = { title: "Create new account or modify existing:",
+                     frameId: 0,
+                     header: [ { text: "" }, { text: "" }, { text: "" } ],
+		     rowNumbers: false,
+                     items: [ [ [ createUiTextNode("email", "Email:") ],
+                                [ createUiInputField("emailInput", "", false) ],
+				[ createUiFunctionButton("Send Email!", "var email=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'emailInput') { email = i.value; }; }); sendToServer('accountRequestMessage', {email:email}); return false;") ] ],
+			      [ [ createUiTextNode("verification", "Verification code:") ],
+				[ createUiInputField("verificationInput", "", false) ],
+				[ createUiFunctionButton("Validate Account!", "var code=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'verificationInput') { code = i.value; }; }); sessionPassword = code.slice(8,24); sendToServer('validateAccountMessage', { email: code.slice(0,8), challenge: Aes.Ctr.encrypt('clientValidating', sessionPassword, 128) });") ] ] ] };
+    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
+    var sendable = { type: "createUiPage",
+                     content: { frameList: frameList,
+				buttonList: [ { id: 501,
+						text: "Cancel",
+						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" } ] } };
+    sendPlainTextToClient(cookie, sendable);
+    setStatustoClient(cookie, "Modify account");
+}
+
+function processAccountRequestMessage(cookie, content) {
+    servicelog("Request for email verification: [" + content.email + "]");
+    sendVerificationEmail(cookie, content.email);
+    processClientStarted(cookie);
+    setStatustoClient(cookie, "Email sent!");
+}
+
+function processValidateAccountMessage(cookie, content) {
+    if(!content.email || !content.challenge) {
+	servicelog("Illegal validate account message");
+	processClientStarted(cookie);
+	return;
+    } else {
+	servicelog("Validation code: " + JSON.stringify(content));
+	var account = validatePendingRequest(content.email.toString());
+	if(account === false) {
+	    servicelog("Failed to validate pending request");
+	    processClientStarted(cookie);
+	    return;
+	}
+	if(Aes.Ctr.decrypt(content.challenge, account.token.key, 128) !== "clientValidating") {
+	    servicelog("Failed to validate code");
+	    processClientStarted(cookie);
+	    return;
+	}
+	setState(cookie, "newUserValidated");
+	cookie.aesKey = account.token.key;
+	var newAccount = { isNewAccount: true,
+			   email: account.email,
+			   username: "",
+			   realname: "",
+			   phone: "" };
+	var user = getUserByEmail(account.email);
+	if(user !== null) {
+	    newAccount.isNewAccount = false;
+	    newAccount.username = user.username;
+	    newAccount.realname = user.realname;
+	    newAccount.phone = user.phone;
+	    setState(cookie, "oldUserValidated");
+	}
+	sendUserAccountModificationDialog(cookie, newAccount);
+	return;
+    }
+}
+
+function validatePendingRequest(emailHash) {
+    var pendingUserData = runCallbacByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingUserData).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return false;
+    } 
+    var target = pendingUserData.filter(function(u) {
+	return u.token.mail === emailHash.slice(0, 8);
+    });
+    if(target.length === 0) {
+	return false;
+    } else {
+	var newPendingUserData = [];
+	newPendingUserData = pendingUserData.filter(function(u) {
+	    return u.token.mail !== emailHash.slice(0, 8);
+	});
+
+	if(runCallbacByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
+	    servicelog("Pending requests database write failed");
+	} else {
+	    servicelog("Removed pending request from database");
+	}
+	return target[0];
+    }
+}
+
+function sendUserAccountModificationDialog(cookie, account) {
+    var title = "";
+    var items = [];
+    items.push([ [ createUiTextNode("email", "Email:") ], [ createUiInputField("emailInput", account.email, false) ] ]);
+    if(account.isNewAccount) {
+	title = "Create new account:";
+	items.push([ [ createUiTextNode("username", "Username:") ], [ createUiInputField("usernameInput", "", false) ] ]);
+    } else {
+	title = "Modify your account:";
+	items.push([ [ createUiTextNode("username", "Username:") ], [ createUiTextNode("usernameInput", account.username , false) ] ]);
+    }
+    items.push([ [ createUiTextNode("realname", "Realname:") ], [ createUiInputField("realnameInput", account.realname, false) ] ]);
+    items.push([ [ createUiTextNode("phone", "Phone:") ], [ createUiInputField("phoneInput", account.phone, false) ] ]);
+    items.push([ [ createUiTextNode("password1", "Password:") ], [ createUiInputField("password1Input", "", true) ] ]);
+    items.push([ [ createUiTextNode("password2", "Repeat password:") ], [ createUiInputField("password2Input", "", true) ] ]);
+
+    var itemList = { title: title,
+                     frameId: 0,
+                     header: [ { text: "" }, { text: "" } ],
+		     rowNumbers: false,
+                     items: items };
+    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
+    var sendable = { type: "createUiPage",
+                     content: { frameList: frameList } };
+    sendCipherTextToClient(cookie, sendable);
+    setStatustoClient(cookie, "Modify account");
+}
+
 
 // UI helper functions
 
@@ -303,9 +430,14 @@ function createUiSelectionList(key, list, selected, active) {
     return { itemType: "selection", key: key, list: listItems, selected: selected, active: active };
 }
 
-function createUiButton(text, callbackMessage, data, active) {
+function createUiMessageButton(text, callbackMessage, data, active) {
     if(active === undefined) { active = true; }
     return { itemType: "button", text: text, callbackMessage: callbackMessage, data: data, active: active };
+}
+
+function createUiFunctionButton(text, callbackFunction, active) {
+    if(active === undefined) { active = true; }
+    return { itemType: "button", text: text, callbackFunction: callbackFunction, active: active };
 }
 
 function createUiInputField(key, value, password) {
@@ -316,7 +448,7 @@ function createUiInputField(key, value, password) {
 function createTopButtons(cookie, adminRequest) {
     if(adminRequest === undefined) { adminRequest = false; }
     var id = 101;
-    var topButtonList = [ { id: id++, text: "Log Out", callbackMessage: "clientStarted" } ];
+    var topButtonList = [ { id: id++, text: "Log Out", callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" } ];
     runCallbacByName("createTopButtonList", cookie).forEach(function(b) {
 	var flag = false; 
 	b.priviliges.forEach(function(p) {
@@ -357,7 +489,7 @@ function processGainAdminMode(cookie, content) {
 			 [ createUiTextArea("email", u.email, 30) ],
 			 [ createUiTextArea("phone", u.phone, 15) ],
 			 userPriviliges,
-		         [ createUiButton("Change", "changeUserPassword", u.username),
+		         [ createUiMessageButton("Change", "changeUserPassword", u.username),
 			   createUiInputField("password", "", true) ] ] )
 	});
 	var emptyPriviligeList = [];
@@ -551,6 +683,108 @@ function extractPasswordChangeFromInputData(data) {
 }
 
 
+// Email related functionality
+
+function generateEmailToken(email) {
+    return { mail: sha1.hash(email).slice(0, 8),
+	     key: sha1.hash(globalSalt + JSON.stringify(new Date().getTime())).slice(0, 16) };
+}
+
+function removePendingEmailRequest(cookie, emailAdress) {
+    var pendingUserData = runCallbacByName("datastorageRead", "pending");
+    if(Object.keys(pendingUserData.pending).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return;
+    }
+    if(pendingUserData.pending.filter(function(u) {
+	return u.email === emailAdress;
+    }).length !== 0) {
+	servicelog("Removing duplicate entry from pending database");
+	var newPendingUserData = { pending: [] };
+	newPendingUserData.pending = pendingUserData.pending.filter(function(u) {
+            return u.email !== emailAdress;
+	});
+	if(runCallbacByName("datastorageWrite", "pending", newPendingUserData) === false) {
+            servicelog("Pending requests database write failed");
+	}
+    } else {
+	servicelog("no duplicate entries in pending database");
+    }
+}
+
+function getUserByEmail(email) {
+    var user = runCallbacByName("datastorageRead", "users").users.filter(function(u) {
+	return u.email === email;
+    });
+    if(user.length === 0) {
+	return null;
+    } else {
+	return user[0];
+    }
+}
+
+function getUserNameByEmail(email) {
+    var user = getUserByEmail(email);
+    if(user != null) {
+	return user.username;
+    } else {
+	return "";
+    }
+}
+
+function sendVerificationEmail(cookie, recipientAddress) {
+    removePendingEmailRequest(cookie, recipientAddress);
+    var pendingData = runCallbacByName("datastorageRead", "pending");
+    var emailData = runCallbacByName("datastorageRead", "email");
+    var timeout = new Date();
+    var emailToken = generateEmailToken(recipientAddress);
+    timeout.setHours(timeout.getHours() + 24);
+    var request = { email: recipientAddress,
+                    token: emailToken,
+                    date: timeout.getTime() };
+    pendingData.pending.push(request);
+    if(runCallbacByName("datastorageWrite", "pending", pendingData) === false) {
+	servicelog("Pending database write failed");
+    }
+    if(getUserNameByEmail(recipientAddress) === "") {
+	var emailSubject = "You have requested a new account";
+	var emailBody = "\r\nYou have requested a new user account of xxxxxxxx.\r\n\r\nCopy the following code to the \"validation code\" field and push \"Validate Account!\" button.\r\nYour validation code: " + request.token.mail + request.token.key + "\r\n\r\nThe above code is valid for 24 hours.\r\n\r\n   -Administrator-\r\n";
+    } else {
+	var emailSubject = "Your new password for xxxxxxxx"
+	var emailBody = "\r\nHello " + getUserNameByEmail(recipientAddress) + ", you have requested a password reset of your xxxxxxxx account.\r\n\r\nCopy the following code to the \"validation code\" field and push \"Validate Account!\" button.\r\nYour validation code: " + request.token.mail + request.token.key + "\r\n\r\nThe above code is valid for 24 hours.\r\n\r\n   -Administrator-\r\n"
+    }
+    var mailDetails = { text: emailBody,
+			from: emailData.sender,
+			to: recipientAddress,
+			subject: emailSubject };
+
+    sendEmail(cookie, mailDetails, false, "account verification", false, false);
+}
+
+function sendEmail(cookie, emailDetails, logline) {
+    var emailData = runCallbacByName("datastorageRead", "email");
+    if(emailData.blindlyTrust) {
+	servicelog("Trusting self-signed certificates");
+	process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    }
+
+    email.server.connect({
+	user: emailData.user,
+	password: emailData.password,
+	host: emailData.host,
+	ssl: emailData.ssl
+    }).send(emailDetails, function(err, message) {
+	if(err) {
+	    servicelog(err + " : " + JSON.stringify(message));
+	    setStatustoClient(cookie, "Failed sending email!");
+	} else {
+	    servicelog("Sent " + logline + " email to " + emailDetails.to);
+	    setStatustoClient(cookie, "Sent email");
+	}
+    });
+}
+
+
 // Callback to the application specific part handling
 
 var functionList = [];
@@ -581,7 +815,8 @@ module.exports.createUiTextNode = createUiTextNode;
 module.exports.createUiTextArea = createUiTextArea;
 module.exports.createUiCheckBox = createUiCheckBox;
 module.exports.createUiSelectionList = createUiSelectionList;
-module.exports.createUiButton = createUiButton;
+module.exports.createUiMessageButton = createUiMessageButton;
+module.exports.createUiFunctionButton = createUiFunctionButton;
 module.exports.createUiInputField = createUiInputField;
 module.exports.createTopButtons = createTopButtons;
 module.exports.sendCipherTextToClient = sendCipherTextToClient;

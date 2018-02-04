@@ -132,7 +132,6 @@ function createUiPage(inputData) {
 
     fieldset.id= "myDiv2";
     return fieldset;
-
 }
 
 function createFixedItemList(id, inputData, frame) {
@@ -201,18 +200,25 @@ function createTopButtons(inputData) {
     var tableBody = document.createElement('tbody');
     var tableRow = tableBody.insertRow();    
 
-    inputData.topButtonList.forEach(function(b) {
-//	var cell = document.createElement('td');
-	var button = document.createElement('button');
-	button.appendChild(document.createTextNode(b.text));
-	button.id = b.id;
-	button.onclick = function() {
-	    sendToServerEncrypted(b.callbackMessage, inputData);
-	    return false;
-	};
-//	cell.appendChild(button);
-	tableRow.appendChild(button);
-    });
+    if(inputData.topButtonList !== undefined) {
+	inputData.topButtonList.forEach(function(b) {
+//	    var cell = document.createElement('td');
+	    var button = document.createElement('button');
+	    button.appendChild(document.createTextNode(b.text));
+	    button.id = b.id;
+	    if(b.callbackMessage != undefined) {
+		button.onclick = function() {
+		    sendToServerEncrypted(b.callbackMessage, inputData);
+		    return false;
+		};
+	    }
+	    if(b.callbackFunction != undefined) {
+		button.onclick = Function(b.callbackFunction);
+	    }
+//	    cell.appendChild(button);
+	    tableRow.appendChild(button);
+	});
+    }
     table.appendChild(tableBody);
     table.id = "myDiv1";
 
@@ -225,7 +231,7 @@ function createAcceptButtons(inputData) {
     var tableRow = tableBody.insertRow();    
 
     inputData.buttonList.forEach(function(b) {
-//	var cell = document.createElement('td');
+	var cell = document.createElement('td');
 	var button = document.createElement('button');
 	button.appendChild(document.createTextNode(b.text));
 	button.id = b.id;
@@ -242,8 +248,8 @@ function createAcceptButtons(inputData) {
 	if(b.callbackFunction != undefined) {
 	    button.onclick = Function(b.callbackFunction);
 	}
-//	cell.appendChild(button);
-	tableRow.appendChild(button);
+	cell.appendChild(button);
+	tableRow.appendChild(cell);
     });
     table.appendChild(tableBody);
     return table;
