@@ -63,7 +63,16 @@ function processPushMeButtonAction(cookie, data) {
 
 function processGetHelpMessage(cookie, data) {
     framework.servicelog("received getHelpMessage message");
+    var helpWebPage = new Buffer(createPreviewHtmlPage());
+    sendable = { type: "showHtmlPage",
+		 content: helpWebPage.toString("ascii") };
+    framework.sendCipherTextToClient(cookie, sendable);
 }
+
+function createPreviewHtmlPage() {
+    return "<!DOCTYPE html><meta charset=\"UTF-8\"><h1><u>Help Page for Framework example</u></h1><br><hr><h2><font color='red'>NOTE! You need to enable popups from the server end to see this page!</font></h2><br><br>Now if this was a real application, you could detail here the use of ethe UI model, the workflow of various buttons and fielts, etc, etc, ...<br></html>";
+}
+
 
 // Initialize datastorage
 

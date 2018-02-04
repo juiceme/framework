@@ -86,7 +86,7 @@ function handleIncomingMessage(defragmentedMessage) {
 	document.body.replaceChild(div, document.getElementById("myDiv2"));
     }
 
-    if(defragmentedMessage.type == "showTournament") {
+    if(defragmentedMessage.type == "showHtmlPage") {
 	var wnd = window.document.open("about:blank", "", "scrollbars=yes");
 	wnd.document.write(defragmentedMessage.content);
 	wnd.document.close();
