@@ -22,7 +22,6 @@
   "devDependencies": {
   },
   "dependencies": {
-    "websocket": "=1.0.22"
   },
   "scripts": {
     "install": "ln -s .. framework; cd ..; git submodule add https://github.com/juiceme/datastorage.git; git submodule init; git submodule update; npm install"
