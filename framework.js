@@ -332,7 +332,8 @@ function processValidateAccountMessage(cookie, content) {
 	}
 	setState(cookie, "newUserValidated");
 	cookie.aesKey = account.token.key;
-	var newAccount = { isNewAccount: true,
+	var newAccount = { checksum: account.checksum,
+			   isNewAccount: true,
 			   email: account.email,
 			   username: "",
 			   realname: "",
@@ -361,19 +362,48 @@ function validatePendingRequest(emailHash) {
     });
     if(target.length === 0) {
 	return false;
-    } else {
-	var newPendingUserData = [];
-	newPendingUserData = pendingUserData.filter(function(u) {
-	    return u.token.mail !== emailHash.slice(0, 8);
-	});
-
-	if(runCallbacByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
-	    servicelog("Pending requests database write failed");
-	} else {
-	    servicelog("Removed pending request from database");
-	}
-	return target[0];
     }
+    if(target[0].state != "pending") {
+	return false;
+    }
+    target[0].state = "verified";
+    var user = getUserByEmail(target[0].email);
+    if(user !== null) {
+	target[0].username = user.username;
+    } else {
+	target[0].username = "";
+    }
+    var newPendingUserData = [];
+    newPendingUserData = pendingUserData.filter(function(u) {
+	return u.token.mail !== emailHash.slice(0, 8);
+    });
+    newPendingUserData.push(target[0]);
+    if(runCallbacByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
+	servicelog("Pending requests database write failed");
+    }
+    return target[0];
+}
+
+function commitPendingRequest(checksum) {
+    var pendingUserData = runCallbacByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingUserData).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return false;
+    } 
+    var target = pendingUserData.filter(function(u) {
+	return u.checksum === checksum;
+    });
+    if(target.length === 0) {
+	return false;
+    }
+    var newPendingUserData = [];
+    newPendingUserData = pendingUserData.filter(function(u) {
+	return u.checksum !== checksum;
+    });
+        if(runCallbacByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
+	servicelog("Pending requests database write failed");
+    }
+    return target[0];
 }
 
 function sendUserAccountModificationDialog(cookie, account) {
@@ -405,7 +435,7 @@ function sendUserAccountModificationDialog(cookie, account) {
 						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" },
 					      { id: 502,
 						text: "OK",
-						callbackFunction: "var userData=[{ key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
+						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
     sendCipherTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Modify account");
 }
@@ -416,7 +446,8 @@ function processUserAccountChangeMessage(cookie, content) {
 	processClientStarted(cookie);
 	return;
     }
-    var account = { isNewAccount: findObjectByKey(content.userData, "key", "isNewAccount").value,
+    var account = { checksum: findObjectByKey(content.userData, "key", "checksum").value,
+		    isNewAccount: findObjectByKey(content.userData, "key", "isNewAccount").value,
 		    email: findObjectByKey(content.userData, "key", "emailInput").value,
 		    username: findObjectByKey(content.userData, "key", "usernameInput").value,
 		    realname: findObjectByKey(content.userData, "key", "realnameInput").value,
@@ -512,6 +543,41 @@ function findObjectByKey(array, key, value) {
 }
 
 function changeUserAccount(cookie, account) {
+    var target = commitPendingRequest(account.checksum);
+    if(target.username !== "") {
+	account.username = target.username;
+    }
+    var newUsers = [];
+    var oldUsers = runCallbacByName("datastorageRead", "users").users;
+    var flag = true;
+    oldUsers.forEach(function(u) {
+	if(u.username === account.username) {
+	    flag = false;
+	    newUsers.push({ username: account.username,
+			    hash: sha1.hash(account.username),
+			    password: getPasswordHash(account.username, account.password),
+			    email: account.email,
+			    realname: account.realname,
+			    phone: account.phone,
+			    applicationData: u.applicationData });
+	} else {
+	    newUsers.push(u);
+	}
+    });
+    if(flag) {
+	newUsers.push({ username: account.username,
+			hash: sha1.hash(account.username),
+			password: getPasswordHash(account.username, account.password),
+			email: account.email,
+			realname: account.realname,
+			phone: account.phone,
+			applicationData: { priviliges: [] } });
+    }
+    if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
+	servicelog("User database write failed");
+    } else {
+	servicelog("Updated User database.");
+    }
 }
 
 
@@ -587,10 +653,8 @@ function updateAdminDataFromClient(cookie, userData) {
 	runCallbacByName("processResetToMainState", cookie);
 	return;
     }
-
     var newUsers = [];
     var oldUsers = runCallbacByName("datastorageRead", "users").users;
-
     userList.forEach(function(n) {
 	var flag = true;
 	oldUsers.forEach(function(u) {
@@ -605,7 +669,6 @@ function updateAdminDataFromClient(cookie, userData) {
 	    newUsers.push(n);
 	}
     });
-
     if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
 	servicelog("User database write failed");
     } else {
@@ -786,7 +849,10 @@ function sendVerificationEmail(cookie, recipientAddress) {
     timeout.setHours(timeout.getHours() + 24);
     var request = { email: recipientAddress,
                     token: emailToken,
-                    date: timeout.getTime() };
+                    date: timeout.getTime(),
+		    state: "pending" };
+    var checksum = sha1.hash(JSON.stringify(request));
+    request.checksum = checksum;
     pendingData.pending.push(request);
     if(runCallbacByName("datastorageWrite", "pending", pendingData) === false) {
 	servicelog("Pending database write failed");
