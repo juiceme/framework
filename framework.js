@@ -8,7 +8,6 @@ var sha1 = require('./crypto/sha1.js');
 
 var websocPort = 0;
 var globalSalt = sha1.hash(JSON.stringify(new Date().getTime()));
-var databaseVersion = 3;
 var fragmentSize = 10000;
 
 function servicelog(s) {
@@ -114,7 +113,7 @@ wsServer.on('request', function(request) {
 	    if(type === "loginResponse") { processLoginResponse(cookie, content); }
 	    if(type === "payload") {
 		try {
-		    var decryptedMessage = JSON.parse(Aes.Ctr.decrypt(content, cookie.user.password, 128));
+		    var decryptedMessage = JSON.parse(Aes.Ctr.decrypt(content, cookie.aesKey, 128));
 		    defragmentIncomingMessage(cookie, decryptedMessage);
 		} catch(err) {
 		    servicelog("Problem parsing JSON from message: " + err);
@@ -151,6 +150,8 @@ function handleIncomingMessage(cookie, decryptedMessage) {
 //    servicelog("Decrypted message: " + JSON.stringify(decryptedMessage));
     if(decryptedMessage.type === "clientStarted") {
 	processClientStarted(cookie); }
+    if(decryptedMessage.type === "userAccountChangeMessage") {
+	processUserAccountChangeMessage(cookie, decryptedMessage.content); }
     if(stateIs(cookie, "loggedIn")) {
 	if(decryptedMessage.type === "gainAdminMode") {
 	    processGainAdminMode(cookie, decryptedMessage.content); }
@@ -259,7 +260,7 @@ function processUserLogin(cookie, content) {
 
 function processLoginResponse(cookie, content) {
     var sendable;
-    var plainResponse = Aes.Ctr.decrypt(content, cookie.user.password, 128);
+    var plainResponse = Aes.Ctr.decrypt(content, cookie.aesKey, 128);
     if(cookie.challenge === plainResponse) {
 	servicelog("User login OK");
 	setState(cookie, "loggedIn");
@@ -381,15 +382,15 @@ function sendUserAccountModificationDialog(cookie, account) {
     items.push([ [ createUiTextNode("email", "Email:") ], [ createUiInputField("emailInput", account.email, false) ] ]);
     if(account.isNewAccount) {
 	title = "Create new account:";
-	items.push([ [ createUiTextNode("username", "Username:") ], [ createUiInputField("usernameInput", "", false) ] ]);
+	items.push([ [ createUiTextNode("username", "Username:") ], [ createUiInputField("usernameInput", account.username, false) ] ]);
     } else {
 	title = "Modify your account:";
-	items.push([ [ createUiTextNode("username", "Username:") ], [ createUiTextNode("usernameInput", account.username , false) ] ]);
+	items.push([ [ createUiTextNode("username", "Username:") ], [ createUiInputField("usernameInput", account.username, false, true) ] ]);
     }
     items.push([ [ createUiTextNode("realname", "Realname:") ], [ createUiInputField("realnameInput", account.realname, false) ] ]);
     items.push([ [ createUiTextNode("phone", "Phone:") ], [ createUiInputField("phoneInput", account.phone, false) ] ]);
-    items.push([ [ createUiTextNode("password1", "Password:") ], [ createUiInputField("password1Input", "", true) ] ]);
-    items.push([ [ createUiTextNode("password2", "Repeat password:") ], [ createUiInputField("password2Input", "", true) ] ]);
+    items.push([ [ createUiTextNode("password1", "Password:") ], [ createUiInputField("passwordInput1", "", true) ] ]);
+    items.push([ [ createUiTextNode("password2", "Repeat password:") ], [ createUiInputField("passwordInput2", "", true) ] ]);
 
     var itemList = { title: title,
                      frameId: 0,
@@ -398,9 +399,38 @@ function sendUserAccountModificationDialog(cookie, account) {
                      items: items };
     var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
     var sendable = { type: "createUiPage",
-                     content: { frameList: frameList } };
+                     content: { frameList: frameList,
+				buttonList: [ { id: 501,
+						text: "Cancel",
+						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" },
+					      { id: 502,
+						text: "OK",
+						callbackFunction: "var userData=[{ key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
     sendCipherTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Modify account");
+}
+
+function processUserAccountChangeMessage(cookie, content) {
+    if(content.userData === undefined) {
+	servicelog("User account change contains no data.");
+	processClientStarted(cookie);
+	return;
+    }
+    var account = { isNewAccount: findObjectByKey(content.userData, "key", "isNewAccount").value,
+		    email: findObjectByKey(content.userData, "key", "emailInput").value,
+		    username: findObjectByKey(content.userData, "key", "usernameInput").value,
+		    realname: findObjectByKey(content.userData, "key", "realnameInput").value,
+		    phone: findObjectByKey(content.userData, "key", "phoneInput").value };
+    if(findObjectByKey(content.userData, "key", "passwordInput1").value != findObjectByKey(content.userData, "key", "passwordInput2").value) {
+	sendUserAccountModificationDialog(cookie, account);
+	setStatustoClient(cookie, "Password mismatch!");
+	servicelog("Password mismatch in account change dialog");
+    } else {
+	account.password = findObjectByKey(content.userData, "key", "passwordInput1").value;
+	changeUserAccount(cookie, account);
+	processClientStarted(cookie);
+	setStatustoClient(cookie, "User account changed!");
+    }
 }
 
 
@@ -468,6 +498,20 @@ function createTopButtons(cookie, adminRequest) {
 	}
     }
     return topButtonList;
+}
+
+// generic helper functions
+
+function findObjectByKey(array, key, value) {
+    for (var i = 0; i < array.length; i++) {
+        if (array[i][key] === value) {
+            return array[i];
+        }
+    }
+    return null;
+}
+
+function changeUserAccount(cookie, account) {
 }
 
 
