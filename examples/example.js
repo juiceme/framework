@@ -44,16 +44,41 @@ function processResetToMainState(cookie, content) {
 
 function sendMainUiPanel(cookie) {
     var topButtonList = framework.createTopButtons(cookie);
-    var itemList = { title: "Main UI Panel",
+    var mainPanel = { title: "Main UI Panel",
                      frameId: 0,
-                     header: [ { text: "" }, { text: "" }, { text: "" } ],
-                     items: [ [ [ framework.createUiTextNode("some text", "some text") ],
-                                [ framework.createUiTextNode("other text", "some text more") ],
-                                [ framework.createUiMessageButton("push me", "pushMeButtonAction", 1) ] ] ] };
-    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
+                     header: [ { text: "This is a header" }, { text: "also this" }, { text: "and this too" } ],
+                     items: [ [ [ framework.createUiTextNode("sometext", "some static text") ],
+                                [ framework.createUiTextArea("othertext", "some editable text", 25, 1) ],
+                                [ framework.createUiMessageButton("pushme", "pushMeButtonAction", 1) ] ],
+			      [ [ framework.createUiInputField("inputfield1", "this is input field", false ) ],
+				[ framework.createUiInputField("inputfield2", "this is disabled input field", false, true) ] ] ] };
+    var auxPanel = { title: "Aux Panel",
+		     frameId: 1,
+		     header: [ { text: "" }, { text: "" }, { text: "" }, { text: "" } ],
+		     items: [ [ [ framework.createUiTextNode("t1", "") ],
+				[ framework.createUiTextNode("t2", "") ],
+				[ framework.createUiTextNode("t3", "") ],
+				[ framework.createUiTextNode("t4", "") ] ] ] };
+    var anotherPanel = { title: "a panel that has editable rows",
+			 frameId: 2,
+			 header: [ { text: "" }, { text: "" }, { text: "" }, { text: "" } ],
+			 items: [ [ [ framework.createUiTextNode("t10", "Name:") ],
+				    [ framework.createUiTextArea("t11", "Alfred Nussi", 25 ,1) ],
+				    [ framework.createUiTextNode("t12", "Number:") ],
+				    [ framework.createUiTextArea("t13", "050-555 555", 15 ,1) ] ] ],
+			 newItem: [ [ framework.createUiTextNode("tnx", "Name:") ],
+				    [ framework.createUiTextArea("txx", "", 25 ,1) ],
+				    [ framework.createUiTextNode("txx", "Number:") ],
+				    [ framework.createUiTextArea("txx", "", 15 ,1) ] ] };
+
+    var frameList = [ { frameType: "fixedListFrame", frame: mainPanel },
+		      { frameType: "fixedListFrame", frame: auxPanel },
+		      { frameType: "editListFrame", frame: anotherPanel } ];
     var sendable = { type: "createUiPage",
                      content: { topButtonList: topButtonList,
-                                frameList: frameList } };
+                                frameList: frameList,
+				buttonList: [ { id: 501, text: "OK", callbackMessage: "sendOkMessage" },
+                                              { id: 502, text: "Cancel",  callbackMessage: "sendCancelMessage" } ] } };
     framework.sendCipherTextToClient(cookie, sendable);
 }
 

@@ -440,9 +440,10 @@ function createUiFunctionButton(text, callbackFunction, active) {
     return { itemType: "button", text: text, callbackFunction: callbackFunction, active: active };
 }
 
-function createUiInputField(key, value, password) {
+function createUiInputField(key, value, password, disabled) {
     if(password === undefined) { password = false; }
-    return { itemType: "input", key: key, value: value, password: password };
+    if(disabled === undefined) { disabled = false; }
+    return { itemType: "input", key: key, value: value, password: password, disabled: disabled };
 }
 
 function createTopButtons(cookie, adminRequest) {

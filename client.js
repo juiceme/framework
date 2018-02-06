@@ -498,6 +498,11 @@ function createTypedObject(id, item, inputData) {
 	    } else {
 		newItem.type = "password";
 	    }
+	    if(i.disabled === true) {
+		newItem.disabled = true;
+	    } else {
+		newItem.disabled = false;
+	    }
 	    newItem.id = id++;
 	    i.itemId = newItem.id;
 	    newItemContainer.appendChild(newItem);
@@ -566,7 +571,8 @@ function getTypedObjectTemplateById(item, fullData) {
 	    itemList.push( { itemType: "input",
 			     key: i.key,
 			     value: uiItem.value,
-			     password: i.password } );
+			     password: i.password,
+			     disabled: i.disabled } );
 	}
     });
 
