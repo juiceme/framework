@@ -103,7 +103,8 @@ function createPreviewHtmlPage() {
 
 datastorage.initialize("main", { main: { version: 1,
 					 port: 8080,
-					 siteFullUrl: "http://url.to.my.site/" } });
+					 siteFullUrl: "http://url.to.my.site/",
+					 emailVerification: true } });
 datastorage.initialize("users", { users: [ { username: "test",
 					     hash: framework.sha1("test"),
 					     password: framework.getPasswordHash("test", "test"),

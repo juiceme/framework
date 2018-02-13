@@ -220,14 +220,17 @@ function processClientStarted(cookie) {
 			      [ [ createUiTextNode("password", "Password:") ],
 				[ createUiInputField("passwordInput", "", true) ] ] ] };
     var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
+    var buttonList = [ { id: 501,
+			 text: "Login",
+			 callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); sendToServer('userLogin', { username: Sha1.hash(username) } ); return false;" } ];
+    if(runCallbacByName("datastorageRead", "main").main.emailVerification) {
+	buttonList.push({ id: 502,
+			  text: "Create new account / Change passsword",
+			  callbackFunction: "sessionPassword=''; sendToServer('createOrModifyAccount', {}); return false;" });
+    }
     var sendable = { type: "createUiPage",
                      content: { frameList: frameList,
-				buttonList: [ { id: 501,
-						text: "Login",
-						callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); sendToServer('userLogin', { username: Sha1.hash(username) } ); return false;" },
-					      { id: 502,
-						text: "Create new account / Change passsword",
-						callbackFunction: "sessionPassword=''; sendToServer('createOrModifyAccount', {}); return false;" } ] } };
+				buttonList: buttonList } };
     sendPlainTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Login");
 }
