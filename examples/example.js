@@ -99,32 +99,16 @@ function createPreviewHtmlPage() {
 }
 
 
-// Initialize datastorage
+// Initialize application-specific datastorages
 
-datastorage.initialize("main", { main: { version: 1,
-					 port: 8080,
-					 siteFullUrl: "http://url.to.my.site/",
-					 emailVerification: true } });
-datastorage.initialize("users", { users: [ { username: "test",
-					     hash: framework.sha1("test"),
-					     password: framework.getPasswordHash("test", "test"),
-					     applicationData: { priviliges: ["system-admin"] },
-					     realname: "",
-					     email: "",
-					     phone: "" } ] }, true);
-datastorage.initialize("pending", { pending: [] }, true);
-datastorage.initialize("email", { host: "smtp.your-email.com",
-				  user: "username",
-				  password: "password",
-				  sender: "you <username@your-email.com>",
-				  ssl: true,
-				  blindlyTrust: true });
+datastorage.initialize("mystorage", { storage: [] }, true);
 
 
 // Push callbacks to framework
 
 framework.setCallback("datastorageRead", datastorage.read);
 framework.setCallback("datastorageWrite", datastorage.write);
+framework.setCallback("datastorageInitialize", datastorage.initialize);
 framework.setCallback("handleApplicationMessage", handleApplicationMessage);
 framework.setCallback("processResetToMainState", processResetToMainState);
 framework.setCallback("createAdminPanelUserPriviliges", createAdminPanelUserPriviliges);
@@ -133,5 +117,5 @@ framework.setCallback("createTopButtonList", createTopButtonList);
 
 // Start the web interface
 
-framework.startUiLoop(datastorage.read("main").main.port);
+framework.startUiLoop();
 

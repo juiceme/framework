@@ -978,6 +978,30 @@ setInterval(function() {
 }, 1000*60*60);
 
 
+// Initialize internal datastorages
+
+function initializeDataStorages() {
+    runCallbacByName("datastorageInitialize", "main", { main: { version: 1,
+								port: 8080,
+								siteFullUrl: "http://url.to.my.site/",
+								emailVerification: true } });
+    runCallbacByName("datastorageInitialize", "users", { users: [ { username: "test",
+								    hash: sha1.hash("test"),
+								    password: getPasswordHash("test", "test"),
+								    applicationData: { priviliges: ["system-admin"] },
+								    realname: "",
+								    email: "",
+								    phone: "" } ] }, true);
+    runCallbacByName("datastorageInitialize", "pending", { pending: [] }, true);
+    runCallbacByName("datastorageInitialize", "email", { host: "smtp.your-email.com",
+							 user: "username",
+							 password: "password",
+							 sender: "you <username@your-email.com>",
+							 ssl: true,
+							 blindlyTrust: true });
+}
+
+
 // Callback to the application specific part handling
 
 var functionList = [];
@@ -992,13 +1016,16 @@ function runCallbacByName(name, par1, par2, par3, par4, par5) {
 	    return functionList[i].function(par1, par2, par3, par4, par5);
 	}
     }
-    return null;
+    servicelog("Function \"" + name + "\" has nor been pushed as a callback!");
+    servicelog("Exiting program.");
+    process.exit(1);
 }
 
-function startUiLoop(port) {
-    websocPort = port;
-    webServer.listen(port, function() {
-	servicelog("Waiting for client connection to port " + port + "...");
+function startUiLoop() {
+    initializeDataStorages();
+    websocPort = runCallbacByName("datastorageRead", "main").main.port;
+    webServer.listen(websocPort, function() {
+	servicelog("Waiting for client connection to port " + websocPort + "...");
     });
 }
 
@@ -1016,6 +1043,3 @@ module.exports.sendCipherTextToClient = sendCipherTextToClient;
 module.exports.servicelog = servicelog;
 module.exports.setStatustoClient = setStatustoClient;
 module.exports.userHasPrivilige = userHasPrivilige;
-module.exports.getPasswordHash = getPasswordHash;
-module.exports.sha1 = sha1.hash;
-module.exports.aes = Aes.Ctr;
