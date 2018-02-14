@@ -615,18 +615,39 @@ function processGainAdminMode(cookie, content) {
             priviligeCodes = priviligeCodes + p.code + " / ";
         });
         priviligeCodes = priviligeCodes.slice(0, priviligeCodes.length-3);
-	var itemList = { title: "User Admin Data",
-			 frameId: 0,
-			 header: [ { text: "username" }, { text: "realname" }, { text: "email" },
-				   { text: "phone" }, { text: priviligeCodes }, { text: "Change Password" } ],
-			 items: items,
-			 newItem: [ [ createUiTextArea("username", "<username>") ],
-				    [ createUiTextArea("realname", "<realname>", 25) ],
-				    [ createUiTextArea("email", "<email>", 30) ],
-				    [ createUiTextArea("phone", "<phone>", 15) ],
-				    emptyPriviligeList,
-				    [ createUiTextNode("password", "") ] ] };
-	var frameList = [ { frameType: "editListFrame", frame: itemList } ];
+	var userListPanel = { title: "User Admin Data",
+			      frameId: 0,
+			      header: [ { text: "username" }, { text: "realname" }, { text: "email" },
+					{ text: "phone" }, { text: priviligeCodes }, { text: "Change Password" } ],
+			      items: items,
+			      newItem: [ [ createUiTextArea("username", "<username>") ],
+					 [ createUiTextArea("realname", "<realname>", 25) ],
+					 [ createUiTextArea("email", "<email>", 30) ],
+					 [ createUiTextArea("phone", "<phone>", 15) ],
+					 emptyPriviligeList,
+					 [ createUiTextNode("password", "") ] ] };
+	var email = runCallbacByName("datastorageRead", "email");
+	var emailEnabled = runCallbacByName("datastorageRead", "main").main.emailVerification;
+	var emailConfigPanel = { title: "Email Authentication",
+				 frameId: 1,
+				 header: [ { text: "" }, { text: "" } ],
+				 items: [ [ [ createUiTextNode("email_text", "Enabled") ],
+					    [ createUiCheckBox("email_enabled", emailEnabled, "enabled")] ],
+					  [ [ createUiTextNode("mailserver", "Mailserver") ],
+					    [ createUiInputField("mailserver", email.host) ] ],
+					  [ [ createUiTextNode("username", "Username") ],
+					    [ createUiInputField("username", email.user) ] ],
+					  [ [ createUiTextNode("sender", "Sender address") ],
+					    [ createUiInputField("sender", email.sender) ] ],
+					  [ [ createUiTextNode("password", "Password") ],
+					    [ createUiInputField("password", email.password, true) ] ],
+					  [ [ createUiTextNode("use_ssl", "Use SSL") ],
+					    [ createUiCheckBox("use_ssl", email.ssl, "use ssl") ] ],
+					  [ [ createUiTextNode("blindly_trust", "Trust self-signed certs") ],
+					    [ createUiCheckBox("blindly_trust", email.blindlyTrust, "blindly trust") ] ] ] };
+					
+	var frameList = [ { frameType: "editListFrame", frame: userListPanel },
+			  { frameType: "fixedListFrame", frame: emailConfigPanel } ];
 	var sendable = { type: "createUiPage",
 			 content: { topButtonList: topButtonList,
 				    frameList: frameList,
@@ -652,6 +673,7 @@ function processSaveAdminData(cookie, data) {
 
 function updateAdminDataFromClient(cookie, userData) {
     var userList = extractUserListFromInputData(userData);
+    var emailSettings = extractEmailSettingsFromInputData(userData);
     if(userList === null) {
 	runCallbacByName("processResetToMainState", cookie);
 	return;
@@ -674,9 +696,26 @@ function updateAdminDataFromClient(cookie, userData) {
     });
     if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
 	servicelog("User database write failed");
-    } else {
-	servicelog("Updated User database.");
     }
+    var main = runCallbacByName("datastorageRead", "main").main;
+    main.emailVerification = emailSettings.enabled;
+    if(runCallbacByName("datastorageWrite", "main", { main: main }) === false) {
+	servicelog("Main database write failed");
+    }
+    var emailPassword = runCallbacByName("datastorageRead", "email").password;
+    var newEmailSettings = { host: emailSettings.host,
+			     user: emailSettings.user,
+			     sender: emailSettings.sender,
+			     password: emailSettings.password,
+			     ssl: emailSettings.ssl,
+			     blindlyTrust: emailSettings.blindlyTrust };
+    if(newEmailSettings.password === "") {
+	newEmailSettings.password = emailPassword;
+    }
+    if(runCallbacByName("datastorageWrite", "email", newEmailSettings) === false) {
+	servicelog("Email database write failed");
+    }
+    servicelog("Updated User database.");
 }
 
 function processChangeUserPassword(cookie, data) {
@@ -719,51 +758,59 @@ function processChangeUserPassword(cookie, data) {
 
 function extractUserListFromInputData(data) {
     if(data.items === undefined) {
-	servicelog("inputDataata does not contain items");
+	servicelog("inputData does not contain items");
 	return null;
     }
+    var userList = [];
+    data.items[0].frame.forEach(function(u) {
+	var user = { applicationData: { priviliges: [] } };
+	u.forEach(function(row) {
+	    if(row.length === 1) {
+		if(row[0].key === "username") {
+		    if(row[0].text !== undefined) {
+			user.username = row[0].text;
+			user.hash = sha1.hash(row[0].text);
+		    }
+		    if(row[0].value !== undefined) {
+			user.username = row[0].value;
+			user.hash = sha1.hash(row[0].value);
+		    }
+		}
+		if(row[0].key === "realname") { user.realname = row[0].value; }
+		if(row[0].key === "email") { user.email = row[0].value; }
+		if(row[0].key === "phone") { user.phone = row[0].value; }
+	    } else {
+		var priviligeList = runCallbacByName("createAdminPanelUserPriviliges").map(function(p) {
+		    return p.privilige;
+		}); 
+	    	row.forEach(function(item) {
+		    priviligeList.forEach(function(p) {
+			if(item.key === p) {
+			    if(item.checked) {
+				user.applicationData.priviliges.push(p);
+			    }
+			}
+		    });
+		});
+	    }
+	});
+	userList.push(user);
+    });
+    return userList;
+}
+
+function extractEmailSettingsFromInputData(data) {
     if(data.buttonList === undefined) {
 	servicelog("inputData does not contain buttonList");
 	return null;
     }
-    var userList = [];
-    data.items.forEach(function(i) {
-	i.frame.forEach(function(u) {
-	    var user = { applicationData: { priviliges: [] } };
-	    u.forEach(function(row) {
-		if(row.length === 1) {
-		    if(row[0].key === "username") {
-			if(row[0].text !== undefined) {
-			    user.username = row[0].text;
-			    user.hash = sha1.hash(row[0].text);
-			}
-			if(row[0].value !== undefined) {
-			    user.username = row[0].value;
-			    user.hash = sha1.hash(row[0].value);
-			}
-		    }
-		    if(row[0].key === "realname") { user.realname = row[0].value; }
-		    if(row[0].key === "email") { user.email = row[0].value; }
-		    if(row[0].key === "phone") { user.phone = row[0].value; }
-		} else {
-		    var priviligeList = runCallbacByName("createAdminPanelUserPriviliges").map(function(p) {
-			return p.privilige;
-		    }); 
-	    	    row.forEach(function(item) {
-			priviligeList.forEach(function(p) {
-			    if(item.key === p) {
-				if(item.checked) {
-				    user.applicationData.priviliges.push(p);
-				}
-			    }
-			});
-		    });
-		}
-	    });
-	    userList.push(user);
-	});
-    });
-    return userList;
+    return { enabled: data.items[1].frame[0][1][0].checked,
+	     host: data.items[1].frame[1][1][0].value,
+	     user: data.items[1].frame[2][1][0].value,
+	     sender: data.items[1].frame[3][1][0].value,
+	     password: data.items[1].frame[4][1][0].value,
+	     ssl: data.items[1].frame[5][1][0].checked,
+	     blindlyTrust: data.items[1].frame[6][1][0].checked };
 }
 
 function extractPasswordChangeFromInputData(data) {
