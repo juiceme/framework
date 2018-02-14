@@ -946,6 +946,38 @@ function sendEmail(cookie, emailDetails, logline) {
 }
 
 
+// Time out pending email verifications, run once every hour and check for
+// entries older than 24 hours.
+
+setInterval(function() {
+    var now = new Date().getTime();
+    var pendingData = runCallbacByName("datastorageRead", "pending");
+    if(Object.keys(pendingData.pending).length === 0) {
+	servicelog("No pending requests to purge");
+	return;
+    }
+    var purgeCount = 0
+    var newPendingData = { pending: [] };
+    pendingData.pending.forEach(function(r) {
+	if(r.date < now) {
+	    purgeCount++;
+	} else {
+	    newPendingData.pending.push(r);
+	}
+    });
+    if(purgeCount === 0) {
+	servicelog("No pending requests timeouted");
+	return;
+    } else {
+	if(runCallbacByName("datastorageWrite", "pending", newPendingData) === false) {
+	    servicelog("Pending requests database write failed");
+	} else {
+	    servicelog("Removed " + purgeCount + " timeouted pending requests");
+	}
+    }
+}, 1000*60*60);
+
+
 // Callback to the application specific part handling
 
 var functionList = [];
