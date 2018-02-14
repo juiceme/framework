@@ -17,8 +17,8 @@ function handleApplicationMessage(cookie, decryptedMessage) {
 // Administration UI panel requires application to provide needed priviliges
 
 function createAdminPanelUserPriviliges() {
-    return [ { privilige: "view", code: "v" },
-	     { privilige: "system-admin", code: "a"} ];
+    // at least a "view" privilige is nice-to-have, add others as you need them.
+    return [ { privilige: "view", code: "v" } ];
 }
 
 

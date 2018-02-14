@@ -584,7 +584,13 @@ function changeUserAccount(cookie, account) {
 }
 
 
-// Anminstration UI panel
+// Adminstration UI panel
+
+function createPriviligeList() {
+    var priviligeList = runCallbacByName("createAdminPanelUserPriviliges");
+    priviligeList.push({ privilige: "system-admin", code: "a"});
+    return priviligeList;
+}
 
 function processGainAdminMode(cookie, content) {
     servicelog("Client #" + cookie.count + " requests Sytem Administration priviliges");
@@ -592,7 +598,7 @@ function processGainAdminMode(cookie, content) {
 	servicelog("Granting Sytem Administration priviliges to user " + cookie.user.username);
 	var topButtonList =  createTopButtons(cookie, true);
 	var items = [];
-	var priviligeList = runCallbacByName("createAdminPanelUserPriviliges");
+	var priviligeList = createPriviligeList();
 	runCallbacByName("datastorageRead", "users").users.forEach(function(u) {
 	    var userPriviliges = [];
 	    priviligeList.forEach(function(p) {
@@ -611,7 +617,7 @@ function processGainAdminMode(cookie, content) {
 	    emptyPriviligeList.push(createUiCheckBox(p.privilige, false, p.code));
 	});
         var priviligeCodes = "";
-        runCallbacByName("createAdminPanelUserPriviliges").forEach(function(p) {
+        createPriviligeList().forEach(function(p) {
             priviligeCodes = priviligeCodes + p.code + " / ";
         });
         priviligeCodes = priviligeCodes.slice(0, priviligeCodes.length-3);
@@ -780,7 +786,7 @@ function extractUserListFromInputData(data) {
 		if(row[0].key === "email") { user.email = row[0].value; }
 		if(row[0].key === "phone") { user.phone = row[0].value; }
 	    } else {
-		var priviligeList = runCallbacByName("createAdminPanelUserPriviliges").map(function(p) {
+		var priviligeList = createPriviligeList().map(function(p) {
 		    return p.privilige;
 		}); 
 	    	row.forEach(function(item) {
