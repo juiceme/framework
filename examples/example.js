@@ -11,6 +11,8 @@ function handleApplicationMessage(cookie, decryptedMessage) {
         processPushMeButtonAction(cookie, decryptedMessage.content); }
     if(decryptedMessage.type === "getHelpMessage") {
         processGetHelpMessage(cookie, decryptedMessage.content); }
+    if(decryptedMessage.type === "showPreviewMessage") {
+	processShowPreviewMessage(cookie, decryptedMessage.content); }
 }
 
 
@@ -18,7 +20,8 @@ function handleApplicationMessage(cookie, decryptedMessage) {
 
 function createAdminPanelUserPriviliges() {
     // at least a "view" privilige is nice-to-have, add others as you need them.
-    return [ { privilige: "view", code: "v" } ];
+    return [ { privilige: "view", code: "v" },
+	     { privilige: "preview", code: "pv" } ];
 }
 
 
@@ -27,7 +30,9 @@ function createAdminPanelUserPriviliges() {
 
 function createTopButtonList(cookie) {
     return [ { button: { text: "Help", callbackMessage: "getHelpMessage" },
-	       priviliges: [ "view" ] } ];
+	       priviliges: [ "view" ] },
+	     { button: { text: "Preview", callbackFunction: "var myText=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'inputfield1') { myText = i.value; }; }); sendToServerEncrypted('showPreviewMessage', { text: myText });" },
+	       priviliges: [ "preview" ] } ];
 }
 
 
@@ -92,10 +97,16 @@ function processGetHelpMessage(cookie, data) {
     sendable = { type: "showHtmlPage",
 		 content: helpWebPage.toString("ascii") };
     framework.sendCipherTextToClient(cookie, sendable);
+    framework.servicelog("Sent html page to client");
 }
 
 function createPreviewHtmlPage() {
     return "<!DOCTYPE html><meta charset=\"UTF-8\"><h1><u>Help Page for Framework example</u></h1><br><hr><h2><font color='red'>NOTE! You need to enable popups from the server end to see this page!</font></h2><br><br>Now if this was a real application, you could detail here the use of ethe UI model, the workflow of various buttons and fielts, etc, etc, ...<br></html>";
+}
+
+function processShowPreviewMessage(cookie, data) {
+    framework.servicelog("received showPreviewMessage message, input field content is '" +
+			 data.text + "'");
 }
 
 
