@@ -1,0 +1,26 @@
+{"file":"language","backup":false,"content":{
+	"languages":["english","finnish"],
+	"dictionary":[
+{ "tag": "TERM_USERNAME", "LANG1": "Username", "LANG2": "Käyttäjätunnus" },
+{ "tag": "TERM_PASSWORD", "LANG1": "Password", "LANG2": "Salasana" },
+{ "tag": "TERM_REPEATPASSWORD", "LANG1": "Repeat password", "LANG2": "Salasana uudestaan" },
+{ "tag": "TERM_REALNAME", "LANG1": "Realname", "LANG2": "Nimi" },
+{ "tag": "TERM_PHONE", "LANG1": "Phone", "LANG2": "Puhelin" },
+{ "tag": "TERM_EMAIL", "LANG1": "email", "LANG2": "Sähköposti" },
+{ "tag": "TERM_VERIFICATIONCODE", "LANG1": "Verification code", "LANG2": "Varmistuskoodi" },
+{ "tag": "BUTTON_LOGIN", "LANG1": "Login", "LANG2": "Kirjaudu" },
+{ "tag": "BUTTON_NEWACCOUNT", "LANG1": "Create new account / Change password", "LANG2": "Luo uusi tunnus / Vaihda salasana" },
+{ "tag": "BUTTON_SENDEMAIL", "LANG1": "Send Email!", "LANG2": "Lähetä Sähköposti!" },
+{ "tag": "BUTTON_VALIDATEACCOUNT", "LANG1": "Validate Account!", "LANG2": "Muokkaa Tiliä!" },
+{ "tag": "BUTTON_OK", "LANG1": "OK", "LANG2": "OK" },
+{ "tag": "BUTTON_CANCEL", "LANG1": "Cancel", "LANG2": "Peruuta" },
+{ "tag": "PROMPT_LOGIN", "LANG1": "Please Login:", "LANG2": "Kirjaudu sisään:" },
+{ "tag": "PROMPT_CHANGEACCOUNT", "LANG1": "Create new account or modify existing:", "LANG2": "Luo uusi tili tai muokkaa tiliäsi:" },
+{ "tag": "PROMPT_CREATENEWACCOUNT", "LANG1": "Create new account:", "LANG2": "Luo uusi tili:" },
+{ "tag": "PROMPT_MODIFYOLDACCOUNT", "LANG1": "Modify your account:", "LANG2": "Muokkaa tiliäsi:" },
+{ "tag": "", "LANG1": "", "LANG2": "" },
+{ "tag": "", "LANG1": "", "LANG2": "" },
+{ "tag": "", "LANG1": "", "LANG2": "" },
+{ "tag": "", "LANG1": "", "LANG2": "" }
+]
+}}
