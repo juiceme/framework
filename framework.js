@@ -345,6 +345,7 @@ function processValidateAccountMessage(cookie, content) {
 			   realname: "",
 			   phone: "",
 			   language: runCallbacByName("datastorageRead", "main").main.defaultLanguage };
+	cookie.user.language = newAccount.language;
 	var user = getUserByEmail(account.email);
 	if(user !== null) {
 	    newAccount.isNewAccount = false;
@@ -353,6 +354,7 @@ function processValidateAccountMessage(cookie, content) {
 	    newAccount.phone = user.phone;
 	    newAccount.language = user.language;
 	    setState(cookie, "oldUserValidated");
+	    cookie.user.language = user.language;
 	}
 	sendUserAccountModificationDialog(cookie, newAccount);
 	return;
@@ -417,26 +419,26 @@ function commitPendingRequest(checksum) {
 function sendUserAccountModificationDialog(cookie, account) {
     var title = "";
     var items = [];
-    items.push([ [ createUiTextNode("email",  getLanguageText(null, "TERM_EMAIL") + ":") ],
+    items.push([ [ createUiTextNode("email", getLanguageText(cookie, "TERM_EMAIL") + ":") ],
 		 [ createUiInputField("emailInput", account.email, false) ] ]);
     if(account.isNewAccount) {
-	title = getLanguageText(null, "PROMPT_CREATENEWACCOUNT");
-	items.push([ [ createUiTextNode("username", getLanguageText(null, "TERM_USERNAME") + ":") ],
+	title = getLanguageText(cookie, "PROMPT_CREATENEWACCOUNT");
+	items.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
 		     [ createUiInputField("usernameInput", account.username, false) ] ]);
     } else {
-	title = getLanguageText(null, "PROMPT_MODIFYOLDACCOUNT");
-	items.push([ [ createUiTextNode("username", getLanguageText(null, "TERM_USERNAME") + ":") ],
+	title = getLanguageText(cookie, "PROMPT_MODIFYOLDACCOUNT");
+	items.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
 		     [ createUiInputField("usernameInput", account.username, false, true) ] ]);
     }
-    items.push([ [ createUiTextNode("realname", getLanguageText(null, "TERM_REALNAME")) ],
+    items.push([ [ createUiTextNode("realname", getLanguageText(cookie, "TERM_REALNAME")) ],
 		 [ createUiInputField("realnameInput", account.realname, false) ] ]);
-    items.push([ [ createUiTextNode("phone", getLanguageText(null, "TERM_PHONE")) ],
+    items.push([ [ createUiTextNode("phone", getLanguageText(cookie, "TERM_PHONE")) ],
 		 [ createUiInputField("phoneInput", account.phone, false) ] ]);
-    items.push([ [ createUiTextNode("language", getLanguageText(null, "TERM_LANGUAGE")) ],
+    items.push([ [ createUiTextNode("language", getLanguageText(cookie, "TERM_LANGUAGE")) ],
 		 [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, account.language, true, false) ] ]);
-    items.push([ [ createUiTextNode("password1", getLanguageText(null, "TERM_PASSWORD")) ],
+    items.push([ [ createUiTextNode("password1", getLanguageText(cookie, "TERM_PASSWORD")) ],
 		 [ createUiInputField("passwordInput1", "", true) ] ]);
-    items.push([ [ createUiTextNode("password2", getLanguageText(null, "TERM_REPEATPASSWORD")) ],
+    items.push([ [ createUiTextNode("password2", getLanguageText(cookie, "TERM_REPEATPASSWORD")) ],
 		 [ createUiInputField("passwordInput2", "", true) ] ]);
     var itemList = { title: title,
                      frameId: 0,
@@ -447,10 +449,10 @@ function sendUserAccountModificationDialog(cookie, account) {
     var sendable = { type: "createUiPage",
                      content: { frameList: frameList,
 				buttonList: [ { id: 501,
-						text: getLanguageText(null, "BUTTON_CANCEL"),
+						text: getLanguageText(cookie, "BUTTON_CANCEL"),
 						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" },
 					      { id: 502,
-						text: getLanguageText(null, "BUTTON_OK"),
+						text: getLanguageText(cookie, "BUTTON_OK"),
 						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
     sendCipherTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Modify account");
@@ -470,6 +472,7 @@ function processUserAccountChangeMessage(cookie, content) {
 		    phone: findObjectByKey(content.userData, "key", "phoneInput").value,
 		    language: findObjectByKey(content.userData, "key", "languageInput").selected };
     if(findObjectByKey(content.userData, "key", "passwordInput1").value != findObjectByKey(content.userData, "key", "passwordInput2").value) {
+	cookie.user.language = account.language;
 	sendUserAccountModificationDialog(cookie, account);
 	setStatustoClient(cookie, "Password mismatch!");
 	servicelog("Password mismatch in account change dialog");
@@ -641,9 +644,10 @@ function processGainAdminMode(cookie, content) {
         priviligeCodes = priviligeCodes.slice(0, priviligeCodes.length-3);
 	var userListPanel = { title: getLanguageText(cookie, "PROMPT_USERADMIN"),
 			      frameId: 0,
-			      header: [ { text: "username" }, { text: "realname" }, { text: "email" },
-					{ text: "phone" }, { text: "language" }, { text: priviligeCodes },
-					{ text: "Change Password" } ],
+			      header: [ { text: getLanguageText(cookie, "TERM_USERNAME") }, { text: getLanguageText(cookie, "TERM_REALNAME") },
+					{ text: getLanguageText(cookie, "TERM_EMAIL") }, { text: getLanguageText(cookie, "TERM_PHONE") },
+					{ text: getLanguageText(cookie, "TERM_LANGUAGE") }, { text: priviligeCodes },
+					{ text: getLanguageText(cookie, "BUTTON_CHANGEPASSWORD") } ],
 			      items: items,
 			      newItem: [ [ createUiTextArea("username", "<username>") ],
 					 [ createUiTextArea("realname", "<realname>", 22) ],
@@ -655,22 +659,22 @@ function processGainAdminMode(cookie, content) {
 					 [ createUiTextNode("password", "") ] ] };
 	var email = runCallbacByName("datastorageRead", "email");
 	var emailEnabled = runCallbacByName("datastorageRead", "main").main.emailVerification;
-	var emailConfigPanel = { title: "Email Authentication",
+	var emailConfigPanel = { title: getLanguageText(cookie, "PROMPT_EMAILADMIN"),
 				 frameId: 1,
 				 header: [ { text: "" }, { text: "" } ],
-				 items: [ [ [ createUiTextNode("email_text", "Enabled") ],
+				 items: [ [ [ createUiTextNode("email_enabled", getLanguageText(cookie, "TERM_ENABLED")) ],
 					    [ createUiCheckBox("email_enabled", emailEnabled, "enabled")] ],
-					  [ [ createUiTextNode("mailserver", "Mailserver") ],
+					  [ [ createUiTextNode("mailserver", getLanguageText(cookie, "TERM_MAILSERVER")) ],
 					    [ createUiInputField("mailserver", email.host) ] ],
-					  [ [ createUiTextNode("username", "Username") ],
+					  [ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME")) ],
 					    [ createUiInputField("username", email.user) ] ],
-					  [ [ createUiTextNode("sender", "Sender address") ],
+					  [ [ createUiTextNode("sender", getLanguageText(cookie, "TERM_SENDERADDRESS")) ],
 					    [ createUiInputField("sender", email.sender) ] ],
-					  [ [ createUiTextNode("password", "Password") ],
+					  [ [ createUiTextNode("password", getLanguageText(cookie, "TERM_PASSWORD")) ],
 					    [ createUiInputField("password", email.password, true) ] ],
-					  [ [ createUiTextNode("use_ssl", "Use SSL") ],
+					  [ [ createUiTextNode("use_ssl", getLanguageText(cookie, "TERM_USESSL")) ],
 					    [ createUiCheckBox("use_ssl", email.ssl, "use ssl") ] ],
-					  [ [ createUiTextNode("blindly_trust", "Trust self-signed certs") ],
+					  [ [ createUiTextNode("blindly_trust", getLanguageText(cookie, "TERM_BLINDLYTRUST")) ],
 					    [ createUiCheckBox("blindly_trust", email.blindlyTrust, "blindly trust") ] ] ] };
 					
 	var frameList = [ { frameType: "editListFrame", frame: userListPanel },
