@@ -990,7 +990,6 @@ function getLanguageText(cookie, tag) {
 	    var language = runCallbacByName("datastorageRead", "main").main.defaultLanguage;
 	}
     }
-    servicelog("language: " + language);
     var langData = runCallbacByName("datastorageRead" ,"language");
     var langIndex = langData.languages.indexOf(language);
     if(++langIndex === 0) { return false; }
