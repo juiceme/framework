@@ -433,7 +433,7 @@ function sendUserAccountModificationDialog(cookie, account) {
     items.push([ [ createUiTextNode("phone", getLanguageText(null, "TERM_PHONE")) ],
 		 [ createUiInputField("phoneInput", account.phone, false) ] ]);
     items.push([ [ createUiTextNode("language", getLanguageText(null, "TERM_LANGUAGE")) ],
-		 [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, runCallbacByName("datastorageRead", "main").main.defaultLanguage) ] ]);
+		 [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, runCallbacByName("datastorageRead", "main").main.defaultLanguage, true, false) ] ]);
     items.push([ [ createUiTextNode("password1", getLanguageText(null, "TERM_PASSWORD")) ],
 		 [ createUiInputField("passwordInput1", "", true) ] ]);
     items.push([ [ createUiTextNode("password2", getLanguageText(null, "TERM_REPEATPASSWORD")) ],
@@ -500,12 +500,13 @@ function createUiCheckBox(key, checked, title, active) {
     return { itemType: "checkbox", key: key, checked: checked, title: title, active: active };
 }
 
-function createUiSelectionList(key, list, selected, active) {
+function createUiSelectionList(key, list, selected, active, zeroOption) {
     var listItems = list.map(function(i) {
 	return { text: i, item: i }
     }).filter(function(f) { return f; });
     if(active === undefined) { active = true; }
-    return { itemType: "selection", key: key, list: listItems, selected: selected, active: active };
+    if(zeroOption === undefined) { zeroOption = true; }
+    return { itemType: "selection", key: key, list: listItems, selected: selected, active: active, zeroOption: zeroOption };
 }
 
 function createUiMessageButton(text, callbackMessage, data, active) {

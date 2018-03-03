@@ -439,8 +439,10 @@ function createTypedObject(id, item, inputData) {
 	    if(!i.active) {
 		newItem.disabled = true;
 	    }
-	    literalList.push(zeroOption);
-	    newItem.add(myOption);
+	    if(i.zeroOption) {
+		literalList.push(zeroOption);
+		newItem.add(myOption);
+	    }
 	    var count = 1;
 	    i.list.forEach(function(j) {
 		var myOption = document.createElement('option');
@@ -555,7 +557,8 @@ function getTypedObjectTemplateById(item, fullData) {
 	    var newSelector = { itemType: "selection",
 				key: i.key,
 				selected: getSelectedItemInList(uiItem),
-				active: i.active };
+				active: i.active,
+				zeroOption: i.zeroOption };
 	    if(fullData) { newSelector.list = i.list; }
 	    itemList.push(newSelector);
 	}
