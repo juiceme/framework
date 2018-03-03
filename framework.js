@@ -433,12 +433,11 @@ function sendUserAccountModificationDialog(cookie, account) {
     items.push([ [ createUiTextNode("phone", getLanguageText(null, "TERM_PHONE")) ],
 		 [ createUiInputField("phoneInput", account.phone, false) ] ]);
     items.push([ [ createUiTextNode("language", getLanguageText(null, "TERM_LANGUAGE")) ],
-		 [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, runCallbacByName("datastorageRead", "main").main.defaultLanguage, true, false) ] ]);
+		 [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, account.language, true, false) ] ]);
     items.push([ [ createUiTextNode("password1", getLanguageText(null, "TERM_PASSWORD")) ],
 		 [ createUiInputField("passwordInput1", "", true) ] ]);
     items.push([ [ createUiTextNode("password2", getLanguageText(null, "TERM_REPEATPASSWORD")) ],
 		 [ createUiInputField("passwordInput2", "", true) ] ]);
-
     var itemList = { title: title,
                      frameId: 0,
                      header: [ { text: "" }, { text: "" } ],
@@ -452,7 +451,7 @@ function sendUserAccountModificationDialog(cookie, account) {
 						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" },
 					      { id: 502,
 						text: getLanguageText(null, "BUTTON_OK"),
-						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
+						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
     sendCipherTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Modify account");
 }
@@ -468,7 +467,8 @@ function processUserAccountChangeMessage(cookie, content) {
 		    email: findObjectByKey(content.userData, "key", "emailInput").value,
 		    username: findObjectByKey(content.userData, "key", "usernameInput").value,
 		    realname: findObjectByKey(content.userData, "key", "realnameInput").value,
-		    phone: findObjectByKey(content.userData, "key", "phoneInput").value };
+		    phone: findObjectByKey(content.userData, "key", "phoneInput").value,
+		    language: findObjectByKey(content.userData, "key", "languageInput").selected };
     if(findObjectByKey(content.userData, "key", "passwordInput1").value != findObjectByKey(content.userData, "key", "passwordInput2").value) {
 	sendUserAccountModificationDialog(cookie, account);
 	setStatustoClient(cookie, "Password mismatch!");
@@ -577,6 +577,7 @@ function changeUserAccount(cookie, account) {
 			    email: account.email,
 			    realname: account.realname,
 			    phone: account.phone,
+			    language: account.language,
 			    applicationData: u.applicationData });
 	} else {
 	    newUsers.push(u);
@@ -589,6 +590,7 @@ function changeUserAccount(cookie, account) {
 			email: account.email,
 			realname: account.realname,
 			phone: account.phone,
+			language: account.language,
 			applicationData: { priviliges: [] } });
     }
     if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
@@ -620,9 +622,10 @@ function processGainAdminMode(cookie, content) {
 		userPriviliges.push(createUiCheckBox(p.privilige, userHasPrivilige(p.privilige, u), p.code));
 	    });
 	    items.push([ [ createUiTextNode("username", u.username) ],
-			 [ createUiTextArea("realname", u.realname, 25) ],
-			 [ createUiTextArea("email", u.email, 30) ],
-			 [ createUiTextArea("phone", u.phone, 15) ],
+			 [ createUiTextArea("realname", u.realname, 22) ],
+			 [ createUiTextArea("email", u.email, 25) ],
+			 [ createUiTextArea("phone", u.phone, 12) ],
+			 [ createUiSelectionList("language", runCallbacByName("datastorageRead" ,"language").languages, u.language, true, false) ],
 			 userPriviliges,
 		         [ createUiMessageButton("Change", "changeUserPassword", u.username),
 			   createUiInputField("password", "", true) ] ] )
@@ -639,12 +642,15 @@ function processGainAdminMode(cookie, content) {
 	var userListPanel = { title: getLanguageText(cookie, "PROMPT_USERADMIN"),
 			      frameId: 0,
 			      header: [ { text: "username" }, { text: "realname" }, { text: "email" },
-					{ text: "phone" }, { text: priviligeCodes }, { text: "Change Password" } ],
+					{ text: "phone" }, { text: "language" }, { text: priviligeCodes },
+					{ text: "Change Password" } ],
 			      items: items,
 			      newItem: [ [ createUiTextArea("username", "<username>") ],
-					 [ createUiTextArea("realname", "<realname>", 25) ],
-					 [ createUiTextArea("email", "<email>", 30) ],
-					 [ createUiTextArea("phone", "<phone>", 15) ],
+					 [ createUiTextArea("realname", "<realname>", 22) ],
+					 [ createUiTextArea("email", "<email>", 26) ],
+					 [ createUiTextArea("phone", "<phone>", 12) ],
+					 [ createUiSelectionList("language", runCallbacByName("datastorageRead" ,"language").languages,
+								 runCallbacByName("datastorageRead", "main").main.defaultLanguage, true, false) ],
 					 emptyPriviligeList,
 					 [ createUiTextNode("password", "") ] ] };
 	var email = runCallbacByName("datastorageRead", "email");
@@ -759,6 +765,7 @@ function processChangeUserPassword(cookie, data) {
 				realname: u.realname,
 				email: u.email,
 				phone: u.phone,
+				language: u.language,
 				password: passwordChange.password });
 	    }
 	});
@@ -800,6 +807,7 @@ function extractUserListFromInputData(data) {
 		if(row[0].key === "realname") { user.realname = row[0].value; }
 		if(row[0].key === "email") { user.email = row[0].value; }
 		if(row[0].key === "phone") { user.phone = row[0].value; }
+		if(row[0].key === "language") { user.language = row[0].selected; }
 	    } else {
 		var priviligeList = createPriviligeList().map(function(p) {
 		    return p.privilige;
@@ -851,11 +859,10 @@ function extractPasswordChangeFromInputData(data) {
 	servicelog("inputData.items does not contain frame");
 	return null;
     }
-
     var passwordChange = data.items[0].frame.map(function(u) {
 	if(u[0][0].text === data.buttonData) {
 	    return { userName: u[0][0].text,
-		     password: getPasswordHash(u[0][0].text, u[5][1].value) };
+		     password: getPasswordHash(u[0][0].text, u[6][1].value) };
 	}
     }).filter(function(f){return f;})[0];
     return passwordChange;
@@ -973,7 +980,11 @@ function getLanguageText(cookie, tag) {
     if(cookie === null) {
 	var language = runCallbacByName("datastorageRead", "main").main.defaultLanguage;
     } else {
-	var language = cookie.language;
+	if(cookie.user !== undefined) {
+	    var language = cookie.user.language;
+	} else {
+	    var language = runCallbacByName("datastorageRead", "main").main.defaultLanguage;
+	}
     }
     servicelog("language: " + language);
     var langData = runCallbacByName("datastorageRead" ,"language");
