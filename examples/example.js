@@ -128,5 +128,6 @@ framework.setCallback("createTopButtonList", createTopButtonList);
 
 // Start the web interface
 
+framework.setApplicationName("Example Application");
 framework.startUiLoop();
 

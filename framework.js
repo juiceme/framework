@@ -9,6 +9,7 @@ var sha1 = require('./crypto/sha1.js');
 var websocPort = 0;
 var globalSalt = sha1.hash(JSON.stringify(new Date().getTime()));
 var fragmentSize = 10000;
+var applicationName = "<name not set>";
 
 function servicelog(s) {
     console.log((new Date()) + " --- " + s);
@@ -479,6 +480,7 @@ function processUserAccountChangeMessage(cookie, content) {
     } else {
 	account.password = findObjectByKey(content.userData, "key", "passwordInput1").value;
 	changeUserAccount(cookie, account);
+	sendConfirmationEmails(cookie, account);
 	processClientStarted(cookie);
 	setStatustoClient(cookie, "User account changed!");
     }
@@ -925,7 +927,6 @@ function getUserNameByEmail(email) {
 function sendVerificationEmail(cookie, recipientAddress) {
     removePendingEmailRequest(cookie, recipientAddress);
     var pendingData = runCallbacByName("datastorageRead", "pending");
-    var emailData = runCallbacByName("datastorageRead", "email");
     var timeout = new Date();
     var emailToken = generateEmailToken(recipientAddress);
     timeout.setHours(timeout.getHours() + 24);
@@ -940,18 +941,64 @@ function sendVerificationEmail(cookie, recipientAddress) {
 	servicelog("Pending database write failed");
     }
     if(getUserNameByEmail(recipientAddress) === "") {
-	var emailSubject = "You have requested a new account";
-	var emailBody = "\r\nYou have requested a new user account of xxxxxxxx.\r\n\r\nCopy the following code to the \"validation code\" field and push \"Validate Account!\" button.\r\nYour validation code: " + request.token.mail + request.token.key + "\r\n\r\nThe above code is valid for 24 hours.\r\n\r\n   -Administrator-\r\n";
+	var dummycookie = { user: { language: runCallbacByName("datastorageRead", "main").main.defaultLanguage } };
+	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWACCOUNTREQUEST");
+	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWACCOUNTREQUEST"),
+				       applicationName,
+				       request.token.mail + request.token.key);
     } else {
-	var emailSubject = "Your new password for xxxxxxxx"
-	var emailBody = "\r\nHello " + getUserNameByEmail(recipientAddress) + ", you have requested a password reset of your xxxxxxxx account.\r\n\r\nCopy the following code to the \"validation code\" field and push \"Validate Account!\" button.\r\nYour validation code: " + request.token.mail + request.token.key + "\r\n\r\nThe above code is valid for 24 hours.\r\n\r\n   -Administrator-\r\n"
+	var dummycookie = { user: { language: getUserByEmail(recipientAddress).language } };
+	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWPASSWORDREQUEST");
+	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWPASSWORDREQUEST"),
+				       getUserNameByEmail(recipientAddress),
+				       applicationName,
+				       request.token.mail + request.token.key);
     }
     var mailDetails = { text: emailBody,
-			from: emailData.sender,
+			from: runCallbacByName("datastorageRead", "email").sender,
 			to: recipientAddress,
 			subject: emailSubject };
-
     sendEmail(cookie, mailDetails, false, "account verification", false, false);
+}
+
+function sendConfirmationEmails(cookie, account) {
+    if(account.isNewAccount) {
+	var dummycookie = { user: { language: runCallbacByName("datastorageRead", "main").main.defaultLanguage } };
+	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWACCOUNTCONFIRM");
+	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWACCOUNTCONFIRM"),
+				       account.username,
+				       applicationName,
+				       runCallbacByName("datastorageRead", "main").main.siteFullUrl);
+	var adminEmailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWACCOUNTCREATED");
+	var adminEmailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWACCOUNTCREATED"),
+					    account.username,
+					    applicationName);
+    } else {
+	var dummycookie = { user: { language: getUserByEmail(account.email).language } };
+	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWPASSWORDCONFIRM");
+	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWPASSWORDCONFIRM"),
+				       account.username,
+				       applicationName,
+				       runCallbacByName("datastorageRead", "main").main.siteFullUrl);
+	var adminEmailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_USERHASCHANGEDPASSWORD");
+	var adminEmailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_USERHASCHANGEDPASSWORD"),
+					    account.username,
+					    applicationName);
+    }
+    var mailDetails = { text: emailBody,
+			from: runCallbacByName("datastorageRead", "email").sender,
+			to: account.email,
+			subject: emailSubject };
+    sendEmail(cookie, mailDetails, false, "account confirmation", false, false);
+    var adminUserEmails = runCallbacByName("datastorageRead", "users").users.map(function(u) {
+	if(userHasPrivilige("system-admin", u)) { return u.email; }
+    }).filter(function(f){return f;}).forEach(function(m) {
+	var mailDetails = { text: adminEmailBody,
+			    from: runCallbacByName("datastorageRead", "email").sender,
+			    to: m,
+			    subject: adminEmailSubject };
+	sendEmail(cookie, mailDetails, false, "admin confirmation", false, false);
+    });
 }
 
 function sendEmail(cookie, emailDetails, logline) {
@@ -992,7 +1039,7 @@ function getLanguageText(cookie, tag) {
     }
     var langData = runCallbacByName("datastorageRead" ,"language");
     var langIndex = langData.languages.indexOf(language);
-    if(++langIndex === 0) { return false; }
+    if(++langIndex === 0) { return "<no string found>"; }
     if(langData.dictionary.filter(function(f) { return f.tag === tag }).length === 0) { return false; }
     return langData.dictionary.filter(function(f) { return f.tag === tag })[0]["LANG" + langIndex];
 }
@@ -1003,6 +1050,10 @@ function fillTagsInText(text) {
 	text = text.replace(substituteString, arguments[i]);
     }
     return text;
+}
+
+function setApplicationName(name) {
+    applicationName = name;
 }
 
 
@@ -1100,6 +1151,7 @@ function startUiLoop() {
 
 module.exports.startUiLoop = startUiLoop;
 module.exports.setCallback = setCallback;
+module.exports.setApplicationName = setApplicationName;
 module.exports.createUiTextNode = createUiTextNode;
 module.exports.createUiTextArea = createUiTextArea;
 module.exports.createUiCheckBox = createUiCheckBox;
