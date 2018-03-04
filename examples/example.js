@@ -60,10 +60,10 @@ function sendMainUiPanel(cookie) {
     var auxPanel = { title: "Aux Panel",
 		     frameId: 1,
 		     header: [ { text: "" }, { text: "" }, { text: "" }, { text: "" } ],
-		     items: [ [ [ framework.createUiTextNode("t1", "") ],
-				[ framework.createUiTextNode("t2", "") ],
-				[ framework.createUiTextNode("t3", "") ],
-				[ framework.createUiTextNode("t4", "") ] ] ] };
+		     items: [ [ [ framework.createUiSelectionList("list1", [ "entten", "tentten", "teelikamentten" ], "tentten") ],
+				[ framework.createUiSelectionList("list1", [ "fiipula", "faapula", "fot" ], "fiipula", false) ],
+				[ framework.createUiSelectionList("list1", [ "eelin", "keelin", "klot" ], "klot", true, false) ],
+				[ framework.createUiSelectionList("list1", [ "1", "2", "3", "4", "5", "6" ], "5") ] ] ] };
     var anotherPanel = { title: "a panel that has editable rows",
 			 frameId: 2,
 			 header: [ { text: "" }, { text: "" }, { text: "" }, { text: "" } ],
