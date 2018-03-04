@@ -1044,7 +1044,7 @@ function initializeDataStorages() {
     runCallbacByName("datastorageInitialize", "main", { main: { version: 1,
 								port: 8080,
 								siteFullUrl: "http://url.to.my.site/",
-								emailVerification: true,
+								emailVerification: false,
 								defaultLanguage: "english" } });
     runCallbacByName("datastorageInitialize", "users", { users: [ { username: "test",
 								    hash: sha1.hash("test"),
