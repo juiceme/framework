@@ -1131,7 +1131,7 @@ function runCallbacByName(name, par1, par2, par3, par4, par5) {
 	    return functionList[i].function(par1, par2, par3, par4, par5);
 	}
     }
-    servicelog("Function \"" + name + "\" has nor been pushed as a callback!");
+    servicelog("ERROR: Function \"" + name + "\" has not been pushed as a callback!");
     servicelog("Exiting program.");
     process.exit(1);
 }
@@ -1139,6 +1139,7 @@ function runCallbacByName(name, par1, par2, par3, par4, par5) {
 function startUiLoop() {
     initializeDataStorages();
     if(runCallbacByName("datastorageRead", "language").languages.length === 0) {
+	servicelog("ERROR: Missing language definition file!");
 	servicelog("Copy the 'language.json' file from framework to './configuration/' directory!");
 	servicelog("Exiting program.");
 	process.exit(1);
@@ -1150,6 +1151,7 @@ function startUiLoop() {
 }
 
 module.exports.startUiLoop = startUiLoop;
+module.exports.initializeDataStorages = initializeDataStorages;
 module.exports.setCallback = setCallback;
 module.exports.setApplicationName = setApplicationName;
 module.exports.createUiTextNode = createUiTextNode;
