@@ -530,6 +530,12 @@ function createUiInputField(key, value, password, disabled) {
     return { itemType: "input", key: key, value: value, password: password, disabled: disabled };
 }
 
+function createUiHtmlCell(key, value, backgroundColor, onClickFunction) {
+    if(backgroundColor === undefined) { backgroundColor = "#f0f0f0" }
+    if(onClickFunction === undefined) { onClickFunction = "return;" }
+    return { itemType: "htmlcell", key: key, value: value, backgroundColor: backgroundColor, onClickFunction: onClickFunction };
+}
+
 function createTopButtons(cookie, adminRequest) {
     if(adminRequest === undefined) { adminRequest = false; }
     var id = 101;
@@ -1161,6 +1167,7 @@ module.exports.createUiSelectionList = createUiSelectionList;
 module.exports.createUiMessageButton = createUiMessageButton;
 module.exports.createUiFunctionButton = createUiFunctionButton;
 module.exports.createUiInputField = createUiInputField;
+module.exports.createUiHtmlCell = createUiHtmlCell;
 module.exports.createTopButtons = createTopButtons;
 module.exports.getLanguageText = getLanguageText;
 module.exports.fillTagsInText = fillTagsInText;

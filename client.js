@@ -265,9 +265,17 @@ function createTableItem(id, count, inputData, item) {
     }
     item.forEach(function(c) {
 	var cell = document.createElement('td');
-	var newTypedObject = createTypedObject(id, c, inputData);
-	id = newTypedObject.id;
-	cell.appendChild(newTypedObject.item);
+	if(c[0].itemType === "htmlcell") {
+	    cell.innerHTML = c[0].value;
+	    cell.style.backgroundColor = c[0].backgroundColor;
+	    cell.onclick = Function( c[0].onClickFunction );
+	    cell.id = id++;
+	    cell.itemType = "htmlcell"
+	} else {
+	    var newTypedObject = createTypedObject(id, c, inputData);
+	    id = newTypedObject.id;
+	    cell.appendChild(newTypedObject.item);
+	}
 	tableRow.appendChild(cell);
     });
     return { id: id, tableRow: tableRow };
@@ -281,9 +289,17 @@ function createEditTableItem(id, count, inputData, item, frameId, lastRow) {
     tableRow.appendChild(cell);
     item.forEach(function(c) {
 	var cell = document.createElement('td');
-	var newTypedObject = createTypedObject(id, c, inputData);
-	id = newTypedObject.id;
-	cell.appendChild(newTypedObject.item);
+	if(c[0].itemType === "htmlcell") {
+	    cell.innerHTML = c[0].value;
+	    cell.style.backgroundColor = c[0].backgroundColor;
+	    cell.onclick = Function( c[0].onClickFunction );
+	    cell.id = id++;
+	    cell.itemType = "htmlcell"
+	} else {
+	    var newTypedObject = createTypedObject(id, c, inputData);
+	    id = newTypedObject.id;
+	    cell.appendChild(newTypedObject.item);
+	}
 	tableRow.appendChild(cell);
     });
     var lastCell = document.createElement('td');
@@ -576,6 +592,11 @@ function getTypedObjectTemplateById(item, fullData) {
 			     value: uiItem.value,
 			     password: i.password,
 			     disabled: i.disabled } );
+	}
+	if(i.itemType === "htmlcell") {
+	    itemList.push( { itemType: "htmlcell",
+			     key: i.key,
+			     value: i.value } );
 	}
     });
 
