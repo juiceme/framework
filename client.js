@@ -510,6 +510,7 @@ function createTypedObject(id, item, inputData) {
 	    var newItem = document.createElement('input');
 	    newItem.itemType = "input";
 	    newItem.key = i.key;
+	    newItem.size = i.length;
 	    if(i.password === false) {
 		newItem.type = "text";
 		newItem.value = i.value;
@@ -589,6 +590,7 @@ function getTypedObjectTemplateById(item, fullData) {
 	if(i.itemType === "input") {
 	    itemList.push( { itemType: "input",
 			     key: i.key,
+			     length: i.length,
 			     value: uiItem.value,
 			     password: i.password,
 			     disabled: i.disabled } );
