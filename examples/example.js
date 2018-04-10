@@ -55,8 +55,8 @@ function sendMainUiPanel(cookie) {
                      items: [ [ [ framework.createUiTextNode("sometext", "some static text") ],
                                 [ framework.createUiTextArea("othertext", "some editable text", 25, 1) ],
                                 [ framework.createUiMessageButton("pushme", "pushMeButtonAction", 1) ] ],
-			      [ [ framework.createUiInputField("inputfield1", "this is input field", false ) ],
-				[ framework.createUiInputField("inputfield2", "this is disabled input field", false, true) ] ] ] };
+			      [ [ framework.createUiInputField("inputfield1", "this is input field", 15, false ) ],
+				[ framework.createUiInputField("inputfield2", "this is disabled input field", 15, false, true) ] ] ] };
     var auxPanel = { title: "Aux Panel",
 		     frameId: 1,
 		     header: [ { text: "" }, { text: "" }, { text: "" }, { text: "" } ],

@@ -421,24 +421,24 @@ function sendUserAccountModificationDialog(cookie, account) {
     var title = "";
     var items = [];
     items.push([ [ createUiTextNode("email", getLanguageText(cookie, "TERM_EMAIL") + ":") ],
-		 [ createUiInputField("emailInput", 15, account.email, false) ] ]);
+		 [ createUiInputField("emailInput", account.email, 15, false) ] ]);
     if(account.isNewAccount) {
 	title = getLanguageText(cookie, "PROMPT_CREATENEWACCOUNT");
 	items.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
-		     [ createUiInputField("usernameInput", 15, account.username, false) ] ]);
+		     [ createUiInputField("usernameInput", account.username, 15, false) ] ]);
     } else {
 	title = getLanguageText(cookie, "PROMPT_MODIFYOLDACCOUNT");
 	items.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
-		     [ createUiInputField("usernameInput", 15, account.username, false, true) ] ]);
+		     [ createUiInputField("usernameInput", account.username, 15, false, true) ] ]);
     }
     items.push([ [ createUiTextNode("realname", getLanguageText(cookie, "TERM_REALNAME")) ],
-		 [ createUiInputField("realnameInput", 15, account.realname, false) ] ]);
+		 [ createUiInputField("realnameInput", account.realname, 15, false) ] ]);
     items.push([ [ createUiTextNode("phone", getLanguageText(cookie, "TERM_PHONE")) ],
-		 [ createUiInputField("phoneInput", 15, account.phone, false) ] ]);
+		 [ createUiInputField("phoneInput", account.phone, 15, false) ] ]);
     items.push([ [ createUiTextNode("language", getLanguageText(cookie, "TERM_LANGUAGE")) ],
 		 [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, account.language, true, false) ] ]);
     items.push([ [ createUiTextNode("password1", getLanguageText(cookie, "TERM_PASSWORD")) ],
-		 [ createUiInputField("passwordInput1", 15, "", true) ] ]);
+		 [ createUiInputField("passwordInput1", "", 15, true) ] ]);
     items.push([ [ createUiTextNode("password2", getLanguageText(cookie, "TERM_REPEATPASSWORD")) ],
 		 [ createUiInputField("passwordInput2", "", 15, true) ] ]);
     var itemList = { title: title,
@@ -674,11 +674,11 @@ function processGainAdminMode(cookie, content) {
 				 items: [ [ [ createUiTextNode("email_enabled", getLanguageText(cookie, "TERM_ENABLED")) ],
 					    [ createUiCheckBox("email_enabled", emailEnabled, "enabled")] ],
 					  [ [ createUiTextNode("mailserver", getLanguageText(cookie, "TERM_MAILSERVER")) ],
-					    [ createUiInputField("mailserver", email.host) ] ],
+					    [ createUiInputField("mailserver", email.host, 15) ] ],
 					  [ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME")) ],
-					    [ createUiInputField("username", email.user) ] ],
+					    [ createUiInputField("username", email.user, 15) ] ],
 					  [ [ createUiTextNode("sender", getLanguageText(cookie, "TERM_SENDERADDRESS")) ],
-					    [ createUiInputField("sender", email.sender) ] ],
+					    [ createUiInputField("sender", email.sender, 15) ] ],
 					  [ [ createUiTextNode("password", getLanguageText(cookie, "TERM_PASSWORD")) ],
 					    [ createUiInputField("password", email.password, 15, true) ] ],
 					  [ [ createUiTextNode("use_ssl", getLanguageText(cookie, "TERM_USESSL")) ],
