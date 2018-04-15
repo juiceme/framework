@@ -50,23 +50,28 @@ function processResetToMainState(cookie, content) {
 function sendMainUiPanel(cookie) {
     var topButtonList = framework.createTopButtons(cookie);
     var mainPanel = { title: "Main UI Panel",
-                     frameId: 0,
-                     header: [ { text: "This is a header" }, { text: "also this" }, { text: "and this too" } ],
-                     items: [ [ [ framework.createUiTextNode("sometext", "some static text") ],
-                                [ framework.createUiTextArea("othertext", "some editable text", 25, 1) ],
-                                [ framework.createUiMessageButton("pushme", "pushMeButtonAction", 1) ] ],
-			      [ [ framework.createUiInputField("inputfield1", "this is input field", 15, false ) ],
-				[ framework.createUiInputField("inputfield2", "this is disabled input field", 15, false, true) ] ] ] };
+                      frameId: 0,
+		      header: [ [ [ framework.createUiHtmlCell("", "<b>This is a header</b>") ],
+				  [ framework.createUiHtmlCell("", "<i>also this</i>" ) ],
+				  [ framework.createUiHtmlCell("", "<u>and this too</u>" ) ] ] ],
+
+                      items: [ [ [ framework.createUiTextNode("sometext", "some static text") ],
+                                 [ framework.createUiTextArea("othertext", "some editable text", 25, 1) ],
+                                 [ framework.createUiMessageButton("pushme", "pushMeButtonAction", 1) ] ],
+			       [ [ framework.createUiInputField("inputfield1", "this is input field", 15, false ) ],
+				 [ framework.createUiInputField("inputfield2", "this is disabled input field", 15, false, true) ] ] ] };
     var auxPanel = { title: "Aux Panel",
 		     frameId: 1,
-		     header: [ { text: "" }, { text: "" }, { text: "" }, { text: "" } ],
+		     header: [ [ [ framework.createUiHtmlCell("", "") ], [ framework.createUiHtmlCell("", "") ],
+				 [ framework.createUiHtmlCell("", "") ], [ framework.createUiHtmlCell("", "") ] ] ],
 		     items: [ [ [ framework.createUiSelectionList("list1", [ "entten", "tentten", "teelikamentten" ], "tentten") ],
 				[ framework.createUiSelectionList("list1", [ "fiipula", "faapula", "fot" ], "fiipula", false) ],
 				[ framework.createUiSelectionList("list1", [ "eelin", "keelin", "klot" ], "klot", true, false) ],
 				[ framework.createUiSelectionList("list1", [ "1", "2", "3", "4", "5", "6" ], "5") ] ] ] };
     var anotherPanel = { title: "a panel that has editable rows",
 			 frameId: 2,
-			 header: [ { text: "" }, { text: "" }, { text: "" }, { text: "" } ],
+			 header: [ [ [ framework.createUiHtmlCell("", "") ], [ framework.createUiHtmlCell("", "") ],
+				     [ framework.createUiHtmlCell("", "") ], [ framework.createUiHtmlCell("", "") ] ] ],
 			 items: [ [ [ framework.createUiTextNode("t10", "Name:") ],
 				    [ framework.createUiTextArea("t11", "Alfred Nussi", 25 ,1) ],
 				    [ framework.createUiTextNode("t12", "Number:") ],

@@ -218,7 +218,7 @@ function processClientStarted(cookie) {
 		 [ createUiInputField("passwordInput", "", 15, true) ] ]);
     var itemList = { title: getLanguageText(null, "PROMPT_LOGIN"),
                      frameId: 0,
-                     header: [ { text: "" }, { text: "" } ],
+		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
 		     rowNumbers: false,
                      items: items };
     var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
@@ -299,7 +299,7 @@ function processCreateOrModifyAccount(cookie) {
 		 [ createUiFunctionButton(getLanguageText(null, "BUTTON_VALIDATEACCOUNT"), "var code=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'verificationInput') { code = i.value; }; }); sessionPassword = code.slice(8,24); sendToServer('validateAccountMessage', { email: code.slice(0,8), challenge: Aes.Ctr.encrypt('clientValidating', sessionPassword, 128) });") ] ]);
     var itemList = { title: getLanguageText(null, "PROMPT_CHANGEACCOUNT"),
                      frameId: 0,
-                     header: [ { text: "" }, { text: "" }, { text: "" } ],
+		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
 		     rowNumbers: false,
                      items: items };
     var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
@@ -443,7 +443,7 @@ function sendUserAccountModificationDialog(cookie, account) {
 		 [ createUiInputField("passwordInput2", "", 15, true) ] ]);
     var itemList = { title: title,
                      frameId: 0,
-                     header: [ { text: "" }, { text: "" } ],
+		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
 		     rowNumbers: false,
                      items: items };
     var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
@@ -653,10 +653,14 @@ function processGainAdminMode(cookie, content) {
         priviligeCodes = priviligeCodes.slice(0, priviligeCodes.length-3);
 	var userListPanel = { title: getLanguageText(cookie, "PROMPT_USERADMIN"),
 			      frameId: 0,
-			      header: [ { text: getLanguageText(cookie, "TERM_USERNAME") }, { text: getLanguageText(cookie, "TERM_REALNAME") },
-					{ text: getLanguageText(cookie, "TERM_EMAIL") }, { text: getLanguageText(cookie, "TERM_PHONE") },
-					{ text: getLanguageText(cookie, "TERM_LANGUAGE") }, { text: priviligeCodes },
-					{ text: getLanguageText(cookie, "BUTTON_CHANGEPASSWORD") } ],
+			      header: [ [ [ createUiHtmlCell("", "") ],
+					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_USERNAME")) ],
+					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_REALNAME")) ],
+					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_EMAIL")) ],
+					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_PHONE")) ],
+					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_LANGUAGE")) ],
+					  [ createUiHtmlCell("", priviligeCodes) ],
+					  [ createUiHtmlCell("", getLanguageText(cookie, "BUTTON_CHANGEPASSWORD")) ] ] ],
 			      items: items,
 			      newItem: [ [ createUiInputField("username", "<username>", 10) ],
 					 [ createUiInputField("realname", "<realname>", 15) ],
@@ -670,7 +674,7 @@ function processGainAdminMode(cookie, content) {
 	var emailEnabled = runCallbacByName("datastorageRead", "main").main.emailVerification;
 	var emailConfigPanel = { title: getLanguageText(cookie, "PROMPT_EMAILADMIN"),
 				 frameId: 1,
-				 header: [ { text: "" }, { text: "" } ],
+				 header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
 				 items: [ [ [ createUiTextNode("email_enabled", getLanguageText(cookie, "TERM_ENABLED")) ],
 					    [ createUiCheckBox("email_enabled", emailEnabled, "enabled")] ],
 					  [ [ createUiTextNode("mailserver", getLanguageText(cookie, "TERM_MAILSERVER")) ],
@@ -1168,6 +1172,7 @@ module.exports.createUiSelectionList = createUiSelectionList;
 module.exports.createUiMessageButton = createUiMessageButton;
 module.exports.createUiFunctionButton = createUiFunctionButton;
 module.exports.createUiInputField = createUiInputField;
+module.exports.createUiHtmlCell = createUiHtmlCell;
 module.exports.createTopButtons = createTopButtons;
 module.exports.sendCipherTextToClient = sendCipherTextToClient;
 module.exports.servicelog = servicelog;

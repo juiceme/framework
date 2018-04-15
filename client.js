@@ -141,14 +141,12 @@ function createFixedItemList(id, inputData, frame) {
 
     var hRow0 = tableHeader.insertRow();
     var cell = hRow0.insertCell();
-    cell.colSpan = frame.header.length + 2;
+    cell.colSpan = frame.header[0].length + 2;
     cell.innerHTML = "<b>" + frame.title + "</b>";
-    var hRow1 = tableHeader.insertRow();
-    if(frame.rowNumbers) { hRow1.appendChild(document.createElement('td')); }
     frame.header.forEach(function(h) {
-	var cell= hRow1.insertCell();
-	cell.innerHTML = "<b>" + h.text + "</b>";
-	hRow1.appendChild(cell);
+	var newHeaderItem = createTableItem(id, 0, inputData, h);
+	id = newHeaderItem.id;
+	tableHeader.appendChild(newHeaderItem.tableRow);
     });
     var count = 0;
     if(frame.rowNumbers) { count = 1; }
@@ -170,14 +168,12 @@ function createEditableItemList(id, inputData, frame) {
 
     var hRow0 = tableHeader.insertRow();
     var cell = hRow0.insertCell();
-    cell.colSpan = frame.header.length + 2;
+    cell.colSpan = frame.header[0].length + 2;
     cell.innerHTML = "<b>" + frame.title + "</b>";
-    var hRow1 = tableHeader.insertRow();
-    hRow1.appendChild(document.createElement('td'));
     frame.header.forEach(function(h) {
-	var cell= hRow1.insertCell();
-	cell.innerHTML = "<b>" + h.text + "</b>";
-	hRow1.appendChild(cell);
+	var newHeaderItem = createTableItem(id, 0, inputData, h);
+	id = newHeaderItem.id;
+	tableHeader.appendChild(newHeaderItem.tableRow);
     });
     var count = 1;
     frame.items.forEach(function(i) {
