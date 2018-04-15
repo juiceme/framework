@@ -505,18 +505,21 @@ function createUiCheckBox(key, checked, title, active) {
     return { itemType: "checkbox", key: key, checked: checked, title: title, active: active };
 }
 
-function createUiSelectionList(key, list, selected, active, zeroOption) {
+function createUiSelectionList(key, list, selected, active, zeroOption, onSelectFunction) {
     var listItems = list.map(function(i) {
 	return { text: i, item: i }
     }).filter(function(f) { return f; });
     if(active === undefined) { active = true; }
     if(zeroOption === undefined) { zeroOption = true; }
-    return { itemType: "selection", key: key, list: listItems, selected: selected, active: active, zeroOption: zeroOption };
+    if(onSelectFunction === undefined) { onSelectFunction = "return;" }
+    return { itemType: "selection", key: key, list: listItems, selected: selected, active: active,
+	     zeroOption: zeroOption, onSelectFunction: onSelectFunction };
 }
 
 function createUiMessageButton(text, callbackMessage, data, active) {
     if(active === undefined) { active = true; }
-    return { itemType: "button", text: text, callbackMessage: callbackMessage, data: data, active: active };
+    return { itemType: "button", text: text, callbackMessage: callbackMessage, data: data,
+	     active: active };
 }
 
 function createUiFunctionButton(text, callbackFunction, active) {
@@ -528,13 +531,15 @@ function createUiInputField(key, value, length, password, disabled) {
     if(length === undefined) { length = 15; }
     if(password === undefined) { password = false; }
     if(disabled === undefined) { disabled = false; }
-    return { itemType: "input", key: key, value: value, length: length, password: password, disabled: disabled };
+    return { itemType: "input", key: key, value: value, length: length, password: password,
+	     disabled: disabled };
 }
 
 function createUiHtmlCell(key, value, backgroundColor, onClickFunction) {
     if(backgroundColor === undefined) { backgroundColor = "#ffffff" }
     if(onClickFunction === undefined) { onClickFunction = "return;" }
-    return { itemType: "htmlcell", key: key, value: value, backgroundColor: backgroundColor, onClickFunction: onClickFunction };
+    return { itemType: "htmlcell", key: key, value: value, backgroundColor: backgroundColor,
+	     onClickFunction: onClickFunction };
 }
 
 function createTopButtons(cookie, adminRequest) {

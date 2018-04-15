@@ -469,6 +469,7 @@ function createTypedObject(id, item, inputData) {
 	    newItem.itemType = "selection";
 	    newItem.key = i.key;
 	    newItem.id = id++;
+	    newItem.onchange = Function(i.onSelectFunction);
 	    i.itemId = newItem.id;
 	    newItem.literalList = literalList;
 	    setSelectedItemInList(newItem, i.selected);
@@ -571,7 +572,8 @@ function getTypedObjectTemplateById(item, fullData) {
 				key: i.key,
 				selected: getSelectedItemInList(uiItem),
 				active: i.active,
-				zeroOption: i.zeroOption };
+				zeroOption: i.zeroOption,
+				onSelectFunction: i.onSelectFunction };
 	    if(fullData) { newSelector.list = i.list; }
 	    itemList.push(newSelector);
 	}
