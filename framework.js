@@ -532,7 +532,7 @@ function createUiInputField(key, value, length, password, disabled) {
 }
 
 function createUiHtmlCell(key, value, backgroundColor, onClickFunction) {
-    if(backgroundColor === undefined) { backgroundColor = "#f0f0f0" }
+    if(backgroundColor === undefined) { backgroundColor = "#ffffff" }
     if(onClickFunction === undefined) { onClickFunction = "return;" }
     return { itemType: "htmlcell", key: key, value: value, backgroundColor: backgroundColor, onClickFunction: onClickFunction };
 }
