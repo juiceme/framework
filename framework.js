@@ -542,8 +542,9 @@ function createUiHtmlCell(key, value, backgroundColor, onClickFunction) {
 	     onClickFunction: onClickFunction };
 }
 
-function createTopButtons(cookie, adminRequest) {
+function createTopButtons(cookie, additionalButtonList, adminRequest) {
     if(adminRequest === undefined) { adminRequest = false; }
+    if(additionalButtonList === undefined) { additionalButtonList = []; }
     var id = 101;
     var topButtonList = [ { id: id++, text: "Log Out", callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" } ];
     runCallbacByName("createTopButtonList", cookie).forEach(function(b) {
@@ -555,6 +556,11 @@ function createTopButtons(cookie, adminRequest) {
 	    b.button.id = id++;
 	    topButtonList.push(b.button);
 	}
+    });
+    // additional buttons need not have defined priviliges
+    additionalButtonList.forEach(function(b) {
+	b.button.id = id++;
+	topButtonList.push(b.button);
     });
     if(userHasPrivilige("system-admin", cookie.user)) {
 	if(adminRequest) {
@@ -630,7 +636,7 @@ function processGainAdminMode(cookie, content) {
     servicelog("Client #" + cookie.count + " requests Sytem Administration priviliges");
     if(userHasPrivilige("system-admin", cookie.user)) {
 	servicelog("Granting Sytem Administration priviliges to user " + cookie.user.username);
-	var topButtonList =  createTopButtons(cookie, true);
+	var topButtonList =  createTopButtons(cookie, [], true);
 	var items = [];
 	var priviligeList = createPriviligeList();
 	runCallbacByName("datastorageRead", "users").users.forEach(function(u) {
