@@ -614,7 +614,7 @@ function changeUserAccount(cookie, account) {
 			realname: account.realname,
 			phone: account.phone,
 			language: account.language,
-			applicationData: { priviliges: [] } });
+			applicationData: { priviliges: runCallbacByName("createDefaultPriviliges") } });
     }
     if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
 	servicelog("User database write failed");
