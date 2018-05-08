@@ -160,6 +160,8 @@ function handleIncomingMessage(cookie, decryptedMessage) {
 	    processSaveAdminData(cookie, decryptedMessage.content); }
 	if(decryptedMessage.type === "changeUserPassword") {
 	    processChangeUserPassword(cookie, decryptedMessage.content); }
+	if(decryptedMessage.type === "getUserSettings") {
+	    processGetUserSettings(cookie, decryptedMessage.content); }
 	// if nothing here matches, jump to application message handler
 	runCallbacByName("handleApplicationMessage", cookie, decryptedMessage);
     }
@@ -341,6 +343,7 @@ function processValidateAccountMessage(cookie, content) {
 	cookie.aesKey = account.token.key;
 	var newAccount = { checksum: account.checksum,
 			   isNewAccount: true,
+			   sendEmail: true,
 			   email: account.email,
 			   username: "",
 			   realname: "",
@@ -350,6 +353,7 @@ function processValidateAccountMessage(cookie, content) {
 	var user = getUserByEmail(account.email);
 	if(user !== null) {
 	    newAccount.isNewAccount = false;
+	    newAccount.sendEmail = true;
 	    newAccount.username = user.username;
 	    newAccount.realname = user.realname;
 	    newAccount.phone = user.phone;
@@ -359,6 +363,30 @@ function processValidateAccountMessage(cookie, content) {
 	}
 	sendUserAccountModificationDialog(cookie, newAccount);
 	return;
+    }
+}
+
+function createPendingRequest(cookie, recipientAddress) {
+    removePendingRequest(cookie, recipientAddress);
+    var pendingData = runCallbacByName("datastorageRead", "pending");
+    var timeout = new Date();
+    var emailToken = generateEmailToken(recipientAddress);
+    timeout.setHours(timeout.getHours() + 24);
+    var request = { email: recipientAddress,
+                    token: emailToken,
+                    date: timeout.getTime(),
+		    state: "pending" };
+    var checksum = sha1.hash(JSON.stringify(request));
+    request.checksum = checksum;
+    pendingData.pending.push(request);
+    if(runCallbacByName("datastorageWrite", "pending", pendingData) === false) {
+	servicelog("Pending database write failed");
+	return { request: false,
+		 token: false };
+    } else {
+	servicelog("Created pending request");
+	return { request: request,
+		 token: emailToken };
     }
 }
 
@@ -372,9 +400,11 @@ function validatePendingRequest(emailHash) {
 	return u.token.mail === emailHash.slice(0, 8);
     });
     if(target.length === 0) {
+	servicelog("Cannot find a pending request");
 	return false;
     }
     if(target[0].state != "pending") {
+	servicelog("Cannot validate a pending request in wrong state");
 	return false;
     }
     target[0].state = "verified";
@@ -392,6 +422,7 @@ function validatePendingRequest(emailHash) {
     if(runCallbacByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
 	servicelog("Pending requests database write failed");
     }
+    servicelog("Validated pending request");
     return target[0];
 }
 
@@ -415,6 +446,28 @@ function commitPendingRequest(checksum) {
 	servicelog("Pending requests database write failed");
     }
     return target[0];
+}
+
+function removePendingRequest(cookie, emailAdress) {
+    var pendingUserData = runCallbacByName("datastorageRead", "pending");
+    if(Object.keys(pendingUserData.pending).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return;
+    }
+    if(pendingUserData.pending.filter(function(u) {
+	return u.email === emailAdress;
+    }).length !== 0) {
+	servicelog("Removing duplicate entry from pending database");
+	var newPendingUserData = { pending: [] };
+	newPendingUserData.pending = pendingUserData.pending.filter(function(u) {
+            return u.email !== emailAdress;
+	});
+	if(runCallbacByName("datastorageWrite", "pending", newPendingUserData) === false) {
+            servicelog("Pending requests database write failed");
+	}
+    } else {
+	servicelog("no duplicate entries in pending database");
+    }
 }
 
 function sendUserAccountModificationDialog(cookie, account) {
@@ -454,7 +507,7 @@ function sendUserAccountModificationDialog(cookie, account) {
 						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" },
 					      { id: 502,
 						text: getLanguageText(cookie, "BUTTON_OK"),
-						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
+						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }, { key:'sendEmail', value:" + account.sendEmail + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
     sendCipherTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Modify account");
 }
@@ -467,6 +520,7 @@ function processUserAccountChangeMessage(cookie, content) {
     }
     var account = { checksum: findObjectByKey(content.userData, "key", "checksum").value,
 		    isNewAccount: findObjectByKey(content.userData, "key", "isNewAccount").value,
+		    sendEmail: findObjectByKey(content.userData, "key", "sendEmail").value,
 		    email: findObjectByKey(content.userData, "key", "emailInput").value,
 		    username: findObjectByKey(content.userData, "key", "usernameInput").value,
 		    realname: findObjectByKey(content.userData, "key", "realnameInput").value,
@@ -480,9 +534,14 @@ function processUserAccountChangeMessage(cookie, content) {
     } else {
 	account.password = findObjectByKey(content.userData, "key", "passwordInput1").value;
 	changeUserAccount(cookie, account);
-	sendConfirmationEmails(cookie, account);
-	processClientStarted(cookie);
 	setStatustoClient(cookie, "User account changed!");
+	if(account.sendEmail) {
+	    sendConfirmationEmails(cookie, account);
+	    processClientStarted(cookie);
+	} else {
+	    servicelog("User account changed.");
+	    runCallbacByName("processResetToMainState", cookie);
+	}
     }
 }
 
@@ -568,6 +627,8 @@ function createTopButtons(cookie, additionalButtonList, adminRequest) {
 	} else {
 	    topButtonList.push( { id: id++, text: "Admin Mode", callbackMessage: "gainAdminMode" } );
 	}
+    } else {
+	topButtonList.push( { id: id++, text: "User Settings", callbackMessage: "getUserSettings" } );
     }
     return topButtonList;
 }
@@ -897,33 +958,41 @@ function extractPasswordChangeFromInputData(data) {
 }
 
 
+// User settings panel
+
+function processGetUserSettings(cookie, content) {
+    var token = createPendingRequest(cookie, cookie.user.email).token
+    if(token === false) {
+	servicelog("Failed to create pending request");
+	processClientStarted(cookie);
+	return;
+    }
+    // because this is not an email request it can immediately be validated
+    var account = validatePendingRequest(token.mail);
+    if(account === false) {
+	servicelog("Failed to validate pending request");
+	processClientStarted(cookie);
+	return;
+    }
+    var newAccount = { checksum: account.checksum,
+		       isNewAccount: false,
+		       sendEmail: false,
+		       email: cookie.user.email,
+		       username: cookie.user.username,
+		       realname: cookie.user.realname,
+		       phone: cookie.user.phone,
+		       language: cookie.user.language };
+
+    sendUserAccountModificationDialog(cookie, newAccount);
+    return;
+}
+
+
 // Email related functionality
 
 function generateEmailToken(email) {
     return { mail: sha1.hash(email).slice(0, 8),
 	     key: sha1.hash(globalSalt + JSON.stringify(new Date().getTime())).slice(0, 16) };
-}
-
-function removePendingEmailRequest(cookie, emailAdress) {
-    var pendingUserData = runCallbacByName("datastorageRead", "pending");
-    if(Object.keys(pendingUserData.pending).length === 0) {
-	servicelog("Empty pending requests database, bailing out");
-	return;
-    }
-    if(pendingUserData.pending.filter(function(u) {
-	return u.email === emailAdress;
-    }).length !== 0) {
-	servicelog("Removing duplicate entry from pending database");
-	var newPendingUserData = { pending: [] };
-	newPendingUserData.pending = pendingUserData.pending.filter(function(u) {
-            return u.email !== emailAdress;
-	});
-	if(runCallbacByName("datastorageWrite", "pending", newPendingUserData) === false) {
-            servicelog("Pending requests database write failed");
-	}
-    } else {
-	servicelog("no duplicate entries in pending database");
-    }
 }
 
 function getUserByEmail(email) {
@@ -947,20 +1016,11 @@ function getUserNameByEmail(email) {
 }
 
 function sendVerificationEmail(cookie, recipientAddress) {
-    removePendingEmailRequest(cookie, recipientAddress);
-    var pendingData = runCallbacByName("datastorageRead", "pending");
-    var timeout = new Date();
-    var emailToken = generateEmailToken(recipientAddress);
-    timeout.setHours(timeout.getHours() + 24);
-    var request = { email: recipientAddress,
-                    token: emailToken,
-                    date: timeout.getTime(),
-		    state: "pending" };
-    var checksum = sha1.hash(JSON.stringify(request));
-    request.checksum = checksum;
-    pendingData.pending.push(request);
-    if(runCallbacByName("datastorageWrite", "pending", pendingData) === false) {
-	servicelog("Pending database write failed");
+    var request = createPendingRequest(cookie, recipientAddress).request;
+    if(request === false) {
+	servicelog("Failed to create pending request");
+	processClientStarted(cookie);
+	return;
     }
     if(getUserNameByEmail(recipientAddress) === "") {
 	var dummycookie = { user: { language: runCallbacByName("datastorageRead", "main").main.defaultLanguage } };
