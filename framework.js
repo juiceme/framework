@@ -655,9 +655,15 @@ function changeUserAccount(cookie, account) {
     oldUsers.forEach(function(u) {
 	if(u.username === account.username) {
 	    flag = false;
+	    var newPassword = "";
+	    if(account.password === "") {
+		newPassword = u.password;
+	    } else {
+		newPassword = getPasswordHash(account.username, account.password);
+	    }
 	    newUsers.push({ username: account.username,
 			    hash: sha1.hash(account.username),
-			    password: getPasswordHash(account.username, account.password),
+			    password: newPassword,
 			    email: account.email,
 			    realname: account.realname,
 			    phone: account.phone,
