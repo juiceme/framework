@@ -111,6 +111,7 @@ wsServer.on('request', function(request) {
 	    if(type === "createOrModifyAccount") { processCreateOrModifyAccount(cookie, content); }
 	    if(type === "accountRequestMessage") { processAccountRequestMessage(cookie, content); }
 	    if(type === "validateAccountMessage") { processValidateAccountMessage(cookie, content); }
+	    if(type === "deleteAccountMessage") { processDeleteAccountMessage(cookie, content); }
 	    if(type === "loginResponse") { processLoginResponse(cookie, content); }
 	    if(type === "payload") {
 		try {
@@ -472,34 +473,42 @@ function removePendingRequest(cookie, emailAdress) {
 
 function sendUserAccountModificationDialog(cookie, account) {
     var title = "";
-    var items = [];
-    items.push([ [ createUiTextNode("email", getLanguageText(cookie, "TERM_EMAIL") + ":") ],
-		 [ createUiInputField("emailInput", account.email, 15, false) ] ]);
+    var configurationItems = [];
+    configurationItems.push([ [ createUiTextNode("email", getLanguageText(cookie, "TERM_EMAIL") + ":") ],
+			      [ createUiInputField("emailInput", account.email, 15, false) ] ]);
     if(account.isNewAccount) {
 	title = getLanguageText(cookie, "PROMPT_CREATENEWACCOUNT");
-	items.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
-		     [ createUiInputField("usernameInput", account.username, 15, false) ] ]);
+	configurationItems.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
+				  [ createUiInputField("usernameInput", account.username, 15, false) ] ]);
     } else {
 	title = getLanguageText(cookie, "PROMPT_MODIFYOLDACCOUNT");
-	items.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
-		     [ createUiInputField("usernameInput", account.username, 15, false, true) ] ]);
+	configurationItems.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
+				  [ createUiInputField("usernameInput", account.username, 15, false, true) ] ]);
     }
-    items.push([ [ createUiTextNode("realname", getLanguageText(cookie, "TERM_REALNAME")) ],
-		 [ createUiInputField("realnameInput", account.realname, 15, false) ] ]);
-    items.push([ [ createUiTextNode("phone", getLanguageText(cookie, "TERM_PHONE")) ],
-		 [ createUiInputField("phoneInput", account.phone, 15, false) ] ]);
-    items.push([ [ createUiTextNode("language", getLanguageText(cookie, "TERM_LANGUAGE")) ],
-		 [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, account.language, true, false) ] ]);
-    items.push([ [ createUiTextNode("password1", getLanguageText(cookie, "TERM_PASSWORD")) ],
-		 [ createUiInputField("passwordInput1", "", 15, true) ] ]);
-    items.push([ [ createUiTextNode("password2", getLanguageText(cookie, "TERM_REPEATPASSWORD")) ],
-		 [ createUiInputField("passwordInput2", "", 15, true) ] ]);
-    var itemList = { title: title,
-                     frameId: 0,
-		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
-		     rowNumbers: false,
-                     items: items };
-    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
+    configurationItems.push([ [ createUiTextNode("realname", getLanguageText(cookie, "TERM_REALNAME")) ],
+			      [ createUiInputField("realnameInput", account.realname, 15, false) ] ]);
+    configurationItems.push([ [ createUiTextNode("phone", getLanguageText(cookie, "TERM_PHONE")) ],
+			      [ createUiInputField("phoneInput", account.phone, 15, false) ] ]);
+    configurationItems.push([ [ createUiTextNode("language", getLanguageText(cookie, "TERM_LANGUAGE")) ],
+			      [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, account.language, true, false) ] ]);
+    configurationItems.push([ [ createUiTextNode("password1", getLanguageText(cookie, "TERM_PASSWORD")) ],
+			      [ createUiInputField("passwordInput1", "", 15, true) ] ]);
+    configurationItems.push([ [ createUiTextNode("password2", getLanguageText(cookie, "TERM_REPEATPASSWORD")) ],
+			      [ createUiInputField("passwordInput2", "", 15, true) ] ]);
+    var configurationItemList = { title: title,
+				  frameId: 0,
+				  header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
+				  rowNumbers: false,
+				  items: configurationItems };
+    var frameList = [ { frameType: "fixedListFrame", frame: configurationItemList } ];
+    if(!account.isNewAccount && !account.sendEmail) {
+	var deleteAccountItemList = { title: getLanguageText(cookie, "PROMPT_DELETEACCOUNT"),
+				      frameId: 1,
+				      header: [ [ [ createUiHtmlCell("", "") ] ] ],
+				      rowNumbers: false,
+				      items: [ [ [ createUiFunctionButton(getLanguageText(cookie, "BUTTON_DELETEACCOUNT"), "if(confirm('" + getLanguageText(cookie, 'PROMPT_CONFIRMDELETEACCOUNT') + "')) { sendToServer('deleteAccountMessage', { }); }") ] ] ] };
+	frameList.push({ frameType: "fixedListFrame", frame: deleteAccountItemList });
+    }
     var sendable = { type: "createUiPage",
                      content: { frameList: frameList,
 				buttonList: [ { id: 501,
@@ -510,6 +519,21 @@ function sendUserAccountModificationDialog(cookie, account) {
 						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }, { key:'sendEmail', value:" + account.sendEmail + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
     sendCipherTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Modify account");
+}
+
+function processDeleteAccountMessage(cookie, content) {
+    servicelog("User " + cookie.user.username + " on client #" + cookie.count + " requests account deletion");
+    removePendingRequest(cookie, cookie.user.email);
+    var newUsers = [];
+    runCallbacByName("datastorageRead", "users").users.forEach(function(u) {
+	if(u.username !== cookie.user.username) { newUsers.push(u); }
+    });
+    if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
+	servicelog("User database write failed");
+    } else {
+	servicelog("Deleted user " + cookie.user.username + " from the database.");
+    }
+    processClientStarted(cookie);
 }
 
 function processUserAccountChangeMessage(cookie, content) {
