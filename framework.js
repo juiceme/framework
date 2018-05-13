@@ -111,7 +111,6 @@ wsServer.on('request', function(request) {
 	    if(type === "createOrModifyAccount") { processCreateOrModifyAccount(cookie, content); }
 	    if(type === "accountRequestMessage") { processAccountRequestMessage(cookie, content); }
 	    if(type === "validateAccountMessage") { processValidateAccountMessage(cookie, content); }
-	    if(type === "deleteAccountMessage") { processDeleteAccountMessage(cookie, content); }
 	    if(type === "loginResponse") { processLoginResponse(cookie, content); }
 	    if(type === "payload") {
 		try {
@@ -163,6 +162,8 @@ function handleIncomingMessage(cookie, decryptedMessage) {
 	    processChangeUserPassword(cookie, decryptedMessage.content); }
 	if(decryptedMessage.type === "getUserSettings") {
 	    processGetUserSettings(cookie, decryptedMessage.content); }
+	if(decryptedMessage.type === "deleteAccountMessage") {
+	    processDeleteAccountMessage(cookie, decryptedMessage.content); }
 	// if nothing here matches, jump to application message handler
 	runCallbacByName("handleApplicationMessage", cookie, decryptedMessage);
     }
@@ -180,6 +181,17 @@ function getUserByHashedUserName(hash) {
     return runCallbacByName("datastorageRead", "users").users.filter(function(u) {
 	return u.hash === hash;
     });
+}
+
+function getUserByUsername(username) {
+    var user = runCallbacByName("datastorageRead", "users").users.filter(function(u) {
+	return u.username === username;
+    });
+    if(user.length === 0) {
+	return false;
+    } else {
+	return user[0];
+    }
 }
 
 function getUserPriviliges(user) {
@@ -329,51 +341,60 @@ function processValidateAccountMessage(cookie, content) {
 	return;
     } else {
 	servicelog("Validation code: " + JSON.stringify(content));
-	var account = validatePendingRequest(content.email.toString());
-	if(account === false) {
+	var request = validatePendingRequest(content.email.toString());
+	if(request === false) {
 	    servicelog("Failed to validate pending request");
 	    processClientStarted(cookie);
 	    return;
 	}
-	if(Aes.Ctr.decrypt(content.challenge, account.token.key, 128) !== "clientValidating") {
+	if(Aes.Ctr.decrypt(content.challenge, request.token.key, 128) !== "clientValidating") {
 	    servicelog("Failed to validate code");
 	    processClientStarted(cookie);
 	    return;
 	}
-	setState(cookie, "newUserValidated");
-	cookie.aesKey = account.token.key;
-	var newAccount = { checksum: account.checksum,
-			   isNewAccount: true,
-			   sendEmail: true,
-			   email: account.email,
-			   username: "",
-			   realname: "",
-			   phone: "",
-			   language: runCallbacByName("datastorageRead", "main").main.defaultLanguage };
-	cookie.user.language = newAccount.language;
-	var user = getUserByEmail(account.email);
-	if(user !== null) {
-	    newAccount.isNewAccount = false;
-	    newAccount.sendEmail = true;
-	    newAccount.username = user.username;
+	cookie.aesKey = request.token.key;
+ 	var newAccount = { checksum: request.checksum,
+			   isNewAccount: request.isNewAccount,
+			   showAccountDeletePanel: false,
+			   email: request.email,
+			   username: request.username };
+	if(request.isNewAccount) {
+	    newAccount.realname = "";
+	    newAccount.phone = "";
+	    newAccount.language = runCallbacByName("datastorageRead", "main").main.defaultLanguage;
+	    cookie.user.language = newAccount.language;
+	    setState(cookie, "newUserValidated");
+	} else {
+	    var user = getUserByEmail(request.email);
 	    newAccount.realname = user.realname;
 	    newAccount.phone = user.phone;
 	    newAccount.language = user.language;
-	    setState(cookie, "oldUserValidated");
 	    cookie.user.language = user.language;
+	    setState(cookie, "oldUserValidated");
 	}
 	sendUserAccountModificationDialog(cookie, newAccount);
 	return;
     }
 }
 
+
+// Pending list handling
+
 function createPendingRequest(cookie, recipientAddress) {
     removePendingRequest(cookie, recipientAddress);
     var pendingData = runCallbacByName("datastorageRead", "pending");
     var timeout = new Date();
     var emailToken = generateEmailToken(recipientAddress);
+    var username = getUserNameByEmail(recipientAddress);
+    var isNewAccount = false;
+    var sendEmailMessages = true;
+    if(username === "") { isNewAccount = true; }
+    if(stateIs(cookie, "loggedIn")) { sendEmailMessages = false; }
     timeout.setHours(timeout.getHours() + 24);
     var request = { email: recipientAddress,
+		    isNewAccount: isNewAccount,
+		    sendEmailMessages: sendEmailMessages,
+		    username: username,
                     token: emailToken,
                     date: timeout.getTime(),
 		    state: "pending" };
@@ -396,7 +417,7 @@ function validatePendingRequest(emailHash) {
     if(Object.keys(pendingUserData).length === 0) {
 	servicelog("Empty pending requests database, bailing out");
 	return false;
-    } 
+    }
     var target = pendingUserData.filter(function(u) {
 	return u.token.mail === emailHash.slice(0, 8);
     });
@@ -408,15 +429,8 @@ function validatePendingRequest(emailHash) {
 	servicelog("Cannot validate a pending request in wrong state");
 	return false;
     }
-    target[0].state = "verified";
-    var user = getUserByEmail(target[0].email);
-    if(user !== null) {
-	target[0].username = user.username;
-    } else {
-	target[0].username = "";
-    }
-    var newPendingUserData = [];
-    newPendingUserData = pendingUserData.filter(function(u) {
+    target[0].state = "validated";
+    var newPendingUserData = pendingUserData.filter(function(u) {
 	return u.token.mail !== emailHash.slice(0, 8);
     });
     newPendingUserData.push(target[0]);
@@ -424,6 +438,26 @@ function validatePendingRequest(emailHash) {
 	servicelog("Pending requests database write failed");
     }
     servicelog("Validated pending request");
+    return target[0];
+}
+
+function getValidatedPendingRequest(checksum) {
+    var pendingUserData = runCallbacByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingUserData).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return false;
+    } 
+    var target = pendingUserData.filter(function(u) {
+	return u.checksum === checksum;
+    });
+    if(target.length === 0) {
+	servicelog("Cannot find a pending request");
+	return false;
+    }
+    if(target[0].state !== "validated") {
+	servicelog("Cannot get a pending request in wrong state");
+	return false;
+    }
     return target[0];
 }
 
@@ -437,13 +471,14 @@ function commitPendingRequest(checksum) {
 	return u.checksum === checksum;
     });
     if(target.length === 0) {
+	servicelog("Cannot find a pending request");
 	return false;
     }
     var newPendingUserData = [];
     newPendingUserData = pendingUserData.filter(function(u) {
 	return u.checksum !== checksum;
     });
-        if(runCallbacByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
+    if(runCallbacByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
 	servicelog("Pending requests database write failed");
     }
     return target[0];
@@ -458,7 +493,7 @@ function removePendingRequest(cookie, emailAdress) {
     if(pendingUserData.pending.filter(function(u) {
 	return u.email === emailAdress;
     }).length !== 0) {
-	servicelog("Removing duplicate entry from pending database");
+	servicelog("Removing existing entry from pending database");
 	var newPendingUserData = { pending: [] };
 	newPendingUserData.pending = pendingUserData.pending.filter(function(u) {
             return u.email !== emailAdress;
@@ -467,7 +502,7 @@ function removePendingRequest(cookie, emailAdress) {
             servicelog("Pending requests database write failed");
 	}
     } else {
-	servicelog("no duplicate entries in pending database");
+	servicelog("no existing entries in pending database");
     }
 }
 
@@ -501,12 +536,12 @@ function sendUserAccountModificationDialog(cookie, account) {
 				  rowNumbers: false,
 				  items: configurationItems };
     var frameList = [ { frameType: "fixedListFrame", frame: configurationItemList } ];
-    if(!account.isNewAccount && !account.sendEmail) {
+    if(account.showAccountDeletePanel) {
 	var deleteAccountItemList = { title: getLanguageText(cookie, "PROMPT_DELETEACCOUNT"),
 				      frameId: 1,
 				      header: [ [ [ createUiHtmlCell("", "") ] ] ],
 				      rowNumbers: false,
-				      items: [ [ [ createUiFunctionButton(getLanguageText(cookie, "BUTTON_DELETEACCOUNT"), "if(confirm('" + getLanguageText(cookie, 'PROMPT_CONFIRMDELETEACCOUNT') + "')) { sendToServer('deleteAccountMessage', { }); }") ] ] ] };
+				      items: [ [ [ createUiFunctionButton(getLanguageText(cookie, "BUTTON_DELETEACCOUNT"), "if(confirm('" + getLanguageText(cookie, 'PROMPT_CONFIRMDELETEACCOUNT') + "')) { sendToServerEncrypted('deleteAccountMessage', { }); }") ] ] ] };
 	frameList.push({ frameType: "fixedListFrame", frame: deleteAccountItemList });
     }
     var sendable = { type: "createUiPage",
@@ -516,7 +551,7 @@ function sendUserAccountModificationDialog(cookie, account) {
 						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" },
 					      { id: 502,
 						text: getLanguageText(cookie, "BUTTON_OK"),
-						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }, { key:'sendEmail', value:" + account.sendEmail + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
+						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
     sendCipherTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Modify account");
 }
@@ -542,30 +577,43 @@ function processUserAccountChangeMessage(cookie, content) {
 	processClientStarted(cookie);
 	return;
     }
+    var request = getValidatedPendingRequest(findObjectByKey(content.userData, "key", "checksum").value);
+    if(request === false) {
+	servicelog("Cannot get a validated pending request");
+	processClientStarted(cookie);
+	return;
+    }
     var account = { checksum: findObjectByKey(content.userData, "key", "checksum").value,
-		    isNewAccount: findObjectByKey(content.userData, "key", "isNewAccount").value,
-		    sendEmail: findObjectByKey(content.userData, "key", "sendEmail").value,
+		    isNewAccount: request.isNewAccount,
 		    email: findObjectByKey(content.userData, "key", "emailInput").value,
-		    username: findObjectByKey(content.userData, "key", "usernameInput").value,
 		    realname: findObjectByKey(content.userData, "key", "realnameInput").value,
 		    phone: findObjectByKey(content.userData, "key", "phoneInput").value,
 		    language: findObjectByKey(content.userData, "key", "languageInput").selected };
-    if(findObjectByKey(content.userData, "key", "passwordInput1").value != findObjectByKey(content.userData, "key", "passwordInput2").value) {
-	cookie.user.language = account.language;
+    if(request.isNewAccount && getUserByUsername(findObjectByKey(content.userData, "key", "usernameInput").value) !== false) {
+	account.username = "";
+	sendUserAccountModificationDialog(cookie, account);
+	setStatustoClient(cookie, "Username exists!");
+	servicelog("User attempted to create an existing username");
+	return;
+    } else {
+	account.username = findObjectByKey(content.userData, "key", "usernameInput").value;
+    }
+    if(findObjectByKey(content.userData, "key", "passwordInput1").value !==
+       findObjectByKey(content.userData, "key", "passwordInput2").value) {
 	sendUserAccountModificationDialog(cookie, account);
 	setStatustoClient(cookie, "Password mismatch!");
 	servicelog("Password mismatch in account change dialog");
+	return;
+    }
+    account.password = findObjectByKey(content.userData, "key", "passwordInput1").value;
+    changeUserAccount(cookie, account);
+    setStatustoClient(cookie, "User account changed!");
+    if(request.sendEmailMessages) {
+	sendConfirmationEmails(cookie, account);
+	processClientStarted(cookie);
     } else {
-	account.password = findObjectByKey(content.userData, "key", "passwordInput1").value;
-	changeUserAccount(cookie, account);
-	setStatustoClient(cookie, "User account changed!");
-	if(account.sendEmail) {
-	    sendConfirmationEmails(cookie, account);
-	    processClientStarted(cookie);
-	} else {
-	    servicelog("User account changed.");
-	    runCallbacByName("processResetToMainState", cookie);
-	}
+	servicelog("User account changed.");
+	runCallbacByName("processResetToMainState", cookie);
     }
 }
 
@@ -669,9 +717,9 @@ function findObjectByKey(array, key, value) {
 }
 
 function changeUserAccount(cookie, account) {
-    var target = commitPendingRequest(account.checksum);
-    if(target.username !== "") {
-	account.username = target.username;
+    var request = commitPendingRequest(account.checksum);
+    if(!request.isNewAccount) {
+	account.username = request.username;
     }
     var newUsers = [];
     var oldUsers = runCallbacByName("datastorageRead", "users").users;
@@ -998,15 +1046,15 @@ function processGetUserSettings(cookie, content) {
 	return;
     }
     // because this is not an email request it can immediately be validated
-    var account = validatePendingRequest(token.mail);
-    if(account === false) {
+    var request = validatePendingRequest(token.mail);
+    if(request === false) {
 	servicelog("Failed to validate pending request");
 	processClientStarted(cookie);
 	return;
     }
-    var newAccount = { checksum: account.checksum,
+    var newAccount = { checksum: request.checksum,
 		       isNewAccount: false,
-		       sendEmail: false,
+		       showAccountDeletePanel: true,
 		       email: cookie.user.email,
 		       username: cookie.user.username,
 		       realname: cookie.user.realname,
@@ -1038,7 +1086,7 @@ function getUserByEmail(email) {
 
 function getUserNameByEmail(email) {
     var user = getUserByEmail(email);
-    if(user != null) {
+    if(user !== null) {
 	return user.username;
     } else {
 	return "";
@@ -1052,7 +1100,7 @@ function sendVerificationEmail(cookie, recipientAddress) {
 	processClientStarted(cookie);
 	return;
     }
-    if(getUserNameByEmail(recipientAddress) === "") {
+    if(request.isNewAccount) {
 	var dummycookie = { user: { language: runCallbacByName("datastorageRead", "main").main.defaultLanguage } };
 	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWACCOUNTREQUEST");
 	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWACCOUNTREQUEST"),
@@ -1062,7 +1110,7 @@ function sendVerificationEmail(cookie, recipientAddress) {
 	var dummycookie = { user: { language: getUserByEmail(recipientAddress).language } };
 	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWPASSWORDREQUEST");
 	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWPASSWORDREQUEST"),
-				       getUserNameByEmail(recipientAddress),
+				       request.username,
 				       applicationName,
 				       request.token.mail + request.token.key);
     }
