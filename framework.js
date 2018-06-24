@@ -80,6 +80,7 @@ wsServer = new websocket.server({
 });
 
 var connectionCount = 0;
+var connectionList = [];
 
 wsServer.on('request', function(request) {
     servicelog("Connection from origin " + request.origin);
@@ -89,6 +90,7 @@ wsServer.on('request', function(request) {
     var defaultUserRights = { priviliges: [ "none" ] }
     servicelog("Client #" + cookie.count  + " accepted");
 
+    connectionList.push(cookie);
     connection.on('message', function(message) {
         if (message.type === 'utf8') {
 	    try {
@@ -126,9 +128,20 @@ wsServer.on('request', function(request) {
 
     connection.on('close', function(connection) {
 	servicelog("Client #" + cookie.count  + " disconnected");
+	var newConnectionList = [];
+	connectionList.forEach(function(c) {
+	    if(c.count != cookie.count) {
+		newConnectionList.push(c);
+	    }
+	});
+	connectionList = newConnectionList;
         cookie = {};
     });
 });
+
+function getConnectionList() {
+    return connectionList;
+}
 
 function defragmentIncomingMessage(cookie, decryptedMessage) {
     if(decryptedMessage.type === "nonFragmented") {
@@ -1327,3 +1340,4 @@ module.exports.sendCipherTextToClient = sendCipherTextToClient;
 module.exports.servicelog = servicelog;
 module.exports.setStatustoClient = setStatustoClient;
 module.exports.userHasPrivilige = userHasPrivilige;
+module.exports.getConnectionList = getConnectionList;
