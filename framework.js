@@ -538,7 +538,7 @@ function sendUserAccountModificationDialog(cookie, account) {
     configurationItems.push([ [ createUiTextNode("phone", getLanguageText(cookie, "TERM_PHONE")) ],
 			      [ createUiInputField("phoneInput", account.phone, 15, false) ] ]);
     configurationItems.push([ [ createUiTextNode("language", getLanguageText(cookie, "TERM_LANGUAGE")) ],
-			      [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, account.language, true, false) ] ]);
+			      [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, account.language, true, false, false) ] ]);
     configurationItems.push([ [ createUiTextNode("password1", getLanguageText(cookie, "TERM_PASSWORD")) ],
 			      [ createUiInputField("passwordInput1", "", 15, true) ] ]);
     configurationItems.push([ [ createUiTextNode("password2", getLanguageText(cookie, "TERM_REPEATPASSWORD")) ],
@@ -643,21 +643,24 @@ function createUiTextArea(key, value, cols, rows) {
     return { itemType: "textarea", key: key, value: value, cols: cols, rows: rows };
 }
 
-function createUiCheckBox(key, checked, title, active) {
+function createUiCheckBox(key, checked, title, active, onClickFunction) {
     if(title === undefined) { title = ""; }
     if(active === undefined) { active = true; }
-    return { itemType: "checkbox", key: key, checked: checked, title: title, active: active };
+    if(onClickFunction === undefined) { onClickFunction = "return;" }
+    return { itemType: "checkbox", key: key, checked: checked, title: title, active: active,
+	     onClickFunction: onClickFunction };
 }
 
-function createUiSelectionList(key, list, selected, active, zeroOption, onSelectFunction) {
+function createUiSelectionList(key, list, selected, active, hidden, zeroOption, onSelectFunction) {
     var listItems = list.map(function(i) {
 	return { text: i, item: i }
     }).filter(function(f) { return f; });
     if(active === undefined) { active = true; }
+    if(hidden === undefined) { hidden = false; }
     if(zeroOption === undefined) { zeroOption = true; }
     if(onSelectFunction === undefined) { onSelectFunction = "return;" }
     return { itemType: "selection", key: key, list: listItems, selected: selected, active: active,
-	     zeroOption: zeroOption, onSelectFunction: onSelectFunction };
+	     hidden: hidden, zeroOption: zeroOption, onSelectFunction: onSelectFunction };
 }
 
 function createUiMessageButton(text, callbackMessage, data, active) {
@@ -800,7 +803,7 @@ function processGainAdminMode(cookie, content) {
 			 [ createUiInputField("realname", u.realname, 15) ],
 			 [ createUiInputField("email", u.email, 20) ],
 			 [ createUiInputField("phone", u.phone, 10) ],
-			 [ createUiSelectionList("language", runCallbacByName("datastorageRead" ,"language").languages, u.language, true, false) ],
+			 [ createUiSelectionList("language", runCallbacByName("datastorageRead" ,"language").languages, u.language, true, false, false) ],
 			 userPriviliges,
 		         [ createUiMessageButton("Change", "changeUserPassword", u.username),
 			   createUiInputField("password", "", 10, true) ] ] )
@@ -830,7 +833,7 @@ function processGainAdminMode(cookie, content) {
 					 [ createUiInputField("email", "<email>", 20) ],
 					 [ createUiInputField("phone", "<phone>", 10) ],
 					 [ createUiSelectionList("language", runCallbacByName("datastorageRead" ,"language").languages,
-								 runCallbacByName("datastorageRead", "main").main.defaultLanguage, true, false) ],
+								 runCallbacByName("datastorageRead", "main").main.defaultLanguage, true, false, false) ],
 					 emptyPriviligeList,
 					 [ createUiTextNode("password", "") ] ] };
 	var email = runCallbacByName("datastorageRead", "email");

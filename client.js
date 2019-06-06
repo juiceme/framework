@@ -434,6 +434,7 @@ function createTypedObject(id, item, inputData) {
 		newItem.disabled = "disabled";
 	    }
 	    newItem.id = id++;
+	    newItem.onclick = Function(i.onClickFunction);
 	    i.itemId = newItem.id;
 	    newItem.checked = i.checked;
 	    newItem.title = i.title;
@@ -451,6 +452,8 @@ function createTypedObject(id, item, inputData) {
 	    if(!i.active) {
 		newItem.disabled = true;
 	    }
+	    if(i.hidden) { newItem.style.visibility = "hidden"; }
+	    else { newItem.style.visibility = "visible"; }
 	    if(i.zeroOption) {
 		literalList.push(zeroOption);
 		newItem.add(myOption);
@@ -565,13 +568,15 @@ function getTypedObjectTemplateById(item, fullData) {
 			     key: i.key,
 			     checked: uiItem.checked,
 			     title: i.title,
-			     active: i.active } );
+			     active: i.active,
+			     onClickFunction: i.onClickFunction } );
 	}
 	if(i.itemType === "selection") {
 	    var newSelector = { itemType: "selection",
 				key: i.key,
 				selected: getSelectedItemInList(uiItem),
 				active: i.active,
+				hidden: i.hidden,
 				zeroOption: i.zeroOption,
 				onSelectFunction: i.onSelectFunction };
 	    if(fullData) { newSelector.list = i.list; }
