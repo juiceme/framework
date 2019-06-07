@@ -13,6 +13,8 @@ function handleApplicationMessage(cookie, decryptedMessage) {
         processGetHelpMessage(cookie, decryptedMessage.content); }
     if(decryptedMessage.type === "showPreviewMessage") {
 	processShowPreviewMessage(cookie, decryptedMessage.content); }
+    if(decryptedMessage.type === "clickedMyBox") {
+	processClickedMyBox(cookie, decryptedMessage.content); }
 }
 
 
@@ -54,6 +56,8 @@ function processResetToMainState(cookie, content) {
     sendMainUiPanel(cookie);
 }
 
+var listIsHidden = false;
+
 function sendMainUiPanel(cookie) {
     var topButtonList = framework.createTopButtons(cookie);
     var mainPanel = { title: "Main UI Panel",
@@ -70,11 +74,14 @@ function sendMainUiPanel(cookie) {
     var auxPanel = { title: "Aux Panel",
 		     frameId: 1,
 		     header: [ [ [ framework.createUiHtmlCell("", "") ], [ framework.createUiHtmlCell("", "") ],
-				 [ framework.createUiHtmlCell("", "") ], [ framework.createUiHtmlCell("", "") ] ] ],
+				 [ framework.createUiHtmlCell("", "") ], [ framework.createUiHtmlCell("joo", "Hide selector") ],
+				 [ framework.createUiHtmlCell("", "") ] ] ],
 		     items: [ [ [ framework.createUiSelectionList("list1", [ "entten", "tentten", "teelikamentten" ], "tentten") ],
 				[ framework.createUiSelectionList("list1", [ "fiipula", "faapula", "fot" ], "fiipula", false) ],
-				[ framework.createUiSelectionList("list1", [ "eelin", "keelin", "klot" ], "klot", true, false) ],
-				[ framework.createUiSelectionList("list1", [ "1", "2", "3", "4", "5", "6" ], "5") ] ] ] };
+				[ framework.createUiSelectionList("list1", [ "eelin", "keelin", "klot" ], "klot", true, false, false) ],
+				[ framework.createUiCheckBox("check", listIsHidden, "click me if you dare!", true,
+							    "sendToServerEncrypted('clickedMyBox', { state: document.getElementById(this.id).checked } );") ],
+				[ framework.createUiSelectionList("list1", [ "1", "2", "3", "4", "5", "6" ], "5", true, listIsHidden) ] ] ] };
     var anotherPanel = { title: "a panel that has editable rows",
 			 frameId: 2,
 			 header: [ [ [ framework.createUiHtmlCell("", "") ], [ framework.createUiHtmlCell("", "") ],
@@ -101,6 +108,12 @@ function sendMainUiPanel(cookie) {
 
 function processPushMeButtonAction(cookie, data) {
     framework.servicelog("received pushMeButtonAction message");
+}
+
+function processClickedMyBox(cookie, data) {
+    framework.servicelog("received clickedMyBox message, state: " + data.state);
+    listIsHidden = data.state;
+    processResetToMainState(cookie);
 }
 
 function processGetHelpMessage(cookie, data) {
