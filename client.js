@@ -264,6 +264,7 @@ function createTableItem(id, count, inputData, item) {
 	if(c[0].itemType === "htmlcell") {
 	    cell.innerHTML = c[0].value;
 	    cell.style.backgroundColor = c[0].backgroundColor;
+	    if(c[0].hidden) { cell.style.visibility = "hidden"; }
 	    cell.onclick = Function( c[0].onClickFunction );
 	    cell.id = id++;
 	    cell.itemType = "htmlcell"
