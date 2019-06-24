@@ -3,6 +3,15 @@ var mySocket = new WebSocket("ws://" + site + ":" + WEBSOCK_PORT + "/");
 var sessionPassword;
 var connectionTimerId;
 
+if(window.NodeList && !NodeList.prototype.forEach) {
+    NodeList.prototype.forEach = function(callback, thisArg) {
+        thisArg = thisArg || window;
+        for(var i = 0; i < this.length; i++) {
+            callback.call(thisArg, this[i], i, this);
+        }
+    };
+}
+
 mySocket.onopen = function (event) {
     var sendable = {type:"clientStarted", content:"none"};
     mySocket.send(JSON.stringify(sendable));
