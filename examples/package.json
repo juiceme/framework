@@ -2,7 +2,9 @@
   "name": "framework_example",
   "description": "small WebGUI application using framework",
   "keywords": [
-    "WebGUI", "Framework", "example"
+    "WebGUI",
+    "Framework",
+    "example"
   ],
   "version": "0.0.1",
   "homepage": "http://www.swagman.org/",
@@ -19,10 +21,8 @@
   "bugs": {
     "url": "http://github.com/juiceme/framework/issues"
   },
-  "devDependencies": {
-  },
-  "dependencies": {
-  },
+  "devDependencies": {},
+  "dependencies": {},
   "scripts": {
     "install": "ln -s .. framework; mkdir configuration; cp framework/language.json configuration/; cd ..; git submodule add https://github.com/juiceme/datastorage.git; git submodule init; git submodule update; npm install; "
   },
