@@ -23,8 +23,8 @@
   },
   "devDependencies": {},
   "dependencies": {
-    "websocket": "=1.0.22",
-    "emailjs": "=1.0.2"
+    "emailjs": "=1.0.2",
+    "websocket": "^1.0.31"
   },
   "scripts": {
     "install": "git submodule init; git submodule update"
