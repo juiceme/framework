@@ -2,7 +2,9 @@
   "name": "framework",
   "description": "WebGUI framework with encrypted messaging",
   "keywords": [
-    "WebGUI", "Framework", "AES"
+    "WebGUI",
+    "Framework",
+    "AES"
   ],
   "version": "0.0.1",
   "homepage": "http://www.swagman.org/",
@@ -19,8 +21,7 @@
   "bugs": {
     "url": "http://github.com/juiceme/framework/issues"
   },
-  "devDependencies": {
-  },
+  "devDependencies": {},
   "dependencies": {
     "websocket": "=1.0.22",
     "emailjs": "=1.0.2"
