@@ -118,7 +118,7 @@ function processClickedMyBox(cookie, data) {
 
 function processGetHelpMessage(cookie, data) {
     framework.servicelog("received getHelpMessage message");
-    var helpWebPage = new Buffer(createPreviewHtmlPage());
+    var helpWebPage = Buffer.from(createPreviewHtmlPage());
     sendable = { type: "showHtmlPage",
 		 content: helpWebPage.toString("ascii") };
     framework.sendCipherTextToClient(cookie, sendable);
