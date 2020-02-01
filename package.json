@@ -23,7 +23,7 @@
   },
   "devDependencies": {},
   "dependencies": {
-    "emailjs": "=1.0.2",
+    "emailjs": "^2.2.0",
     "websocket": "^1.0.31"
   },
   "scripts": {
