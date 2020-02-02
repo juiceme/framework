@@ -57,22 +57,67 @@ function getClientVariables() {
     return "var WEBSOCK_PORT = " + websocPort + ";\n";
 }
 
-var webServer = http.createServer(function(request,response){
-    var clienthead = fs.readFileSync("./framework/clienthead", "utf8");
-    var variables = getClientVariables();
-    var clientbody = fs.readFileSync("./framework/client.js", "utf8");
-    var aesjs = fs.readFileSync("./framework/crypto/aes.js", "utf8");
-    var aesctrjs = fs.readFileSync("./framework/crypto/aes-ctr.js", "utf8");
-    var sha1js = fs.readFileSync("./framework/crypto/sha1.js", "utf8");
-    var sendable = clienthead + variables + clientbody + aesjs + aesctrjs + sha1js + "</script></body></html>";
-    response.writeHeader(200, { "Content-Type": "text/html",
-                                "X-Frame-Options": "deny",
-                                "X-XSS-Protection": "1; mode=block",
-                                "X-Content-Type-Options": "nosniff" });
-    response.write(sendable);
-    response.end();
-    servicelog("Respond with client to: " + JSON.stringify(request.headers));
+function restErrorMessage(number, message) {
+    return("{\n    \"errorcode\": \"" + number + "\",\n    \"error\": \"" + message + "\"\n}\n");
+}
+
+var webServer = http.createServer(function(request, response){
+    request.on('data', function(textBuffer) {
+	try {
+	    var postData = JSON.parse(textBuffer.toString().replace(/'/g, '"'));
+	    res = handleRestMessage(request.url, postData);
+	    response.writeHeader(200, { "Content-Type": "text/html",
+					"X-Frame-Options": "deny",
+					"X-XSS-Protection": "1; mode=block",
+					"X-Content-Type-Options": "nosniff" });
+	    response.write(res);
+	    response.end();
+	} catch(err) {
+	    servicelog("Received illegal api call: " + err);
+	    response.writeHeader(200, { "Content-Type": "text/html",
+					"X-Frame-Options": "deny",
+					"X-XSS-Protection": "1; mode=block",
+					"X-Content-Type-Options": "nosniff" });
+	    response.write(restErrorMessage("ERR_FORMAT", "Invalid JSON message"));
+	    response.end();
+	}
+    });
+    
+    if(request.url.split("/")[1] !== "api") {
+	// api calls do not request client    
+	var clienthead = fs.readFileSync("./framework/clienthead", "utf8");
+	var variables = getClientVariables();
+	var clientbody = fs.readFileSync("./framework/client.js", "utf8");
+	var aesjs = fs.readFileSync("./framework/crypto/aes.js", "utf8");
+	var aesctrjs = fs.readFileSync("./framework/crypto/aes-ctr.js", "utf8");
+	var sha1js = fs.readFileSync("./framework/crypto/sha1.js", "utf8");
+	var sendable = clienthead + variables + clientbody + aesjs + aesctrjs + sha1js + "</script></body></html>";
+	response.writeHeader(200, { "Content-Type": "text/html",
+                                    "X-Frame-Options": "deny",
+                                    "X-XSS-Protection": "1; mode=block",
+                                    "X-Content-Type-Options": "nosniff" });
+	response.write(sendable);
+	response.end();
+	servicelog("Respond with client to: " + JSON.stringify(request.headers));
+    }
 });
+
+function handleRestMessage(url, postData) {
+    servicelog('got data: ' + JSON.stringify(postData));
+    servicelog("got request: " + JSON.stringify(url));
+
+    if(url.split("/")[2] === "start") {
+	return(processClientStartedRest());
+    }
+
+    if(url.split("/")[2] === "login") {
+	return(processUserLoginRest(postData));
+    }
+
+    if(url.split("/")[2] === "window") {
+	return(processGetUiWindowRest(url, postData));	
+    }
+}
 
 wsServer = new websocket.server({
     httpServer: webServer,
@@ -207,6 +252,17 @@ function getUserByUsername(username) {
     }
 }
 
+function getSessionByToken(token) {
+    var session = runCallbacByName("datastorageRead", "session").session.filter(function(s) {
+	return s.token === token;
+    });
+    if(session.length === 0) {
+	return false;
+    } else {
+	return session[0];
+    }
+}
+
 function getUserPriviliges(user) {
     if(user.applicationData.priviliges.length === 0) { return []; }
     if(user.applicationData.priviliges.indexOf("none") > -1) { return []; }
@@ -225,6 +281,44 @@ function getPasswordHash(username, password) {
 
 function getNewChallenge() {
     return ("challenge_" + sha1.hash(globalSalt + new Date().getTime().toString()) + "1");
+}
+
+function getNewSessionKey() {
+    if(typeof this.counter == 'undefined' ) {
+	this.counter = 0;
+    }
+    this.counter++;
+    return (sha1.hash(globalSalt + new Date().getTime().toString() + this.counter));
+}
+
+function processClientStartedRest() {
+    servicelog("Sending initial login view to client");
+    var items = [];
+    items.push([ [ createUiTextNode("username", getLanguageText(null, "TERM_USERNAME") + ":") ],
+		 [ createUiInputField("userNameInput", "", 15, false) ] ]);
+    items.push([ [ createUiTextNode("password", getLanguageText(null, "TERM_PASSWORD") + ":") ],
+		 [ createUiInputField("passwordInput", "", 15, true) ] ]);
+    var itemList = { title: getLanguageText(null, "PROMPT_LOGIN"),
+                     frameId: 0,
+		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
+		     rowNumbers: false,
+                     items: items };
+    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
+    var buttonList = [ { id: 501,
+			 text: getLanguageText(null, "BUTTON_LOGIN"),
+			 callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); postData('/api/login', {username : Sha1.hash(username)}); return false;" } ];
+    if(runCallbacByName("datastorageRead", "main").main.emailVerification) {
+	buttonList.push({ id: 502,
+			  text: getLanguageText(null, "BUTTON_NEWACCOUNT"),
+			  callbackFunction: "sessionPassword=''; sendToServer('createOrModifyAccount', {}); return false;" });
+    }
+    var sendable = { errorcode : "ERR_OK",
+		     error : "OK",
+		     type : "T_LOGINUIREQUEST",
+		     data : { type: "createLoginUiPage",
+			      content: { frameList: frameList,
+					 buttonList: buttonList }}};
+    return(JSON.stringify(sendable));
 }
 
 function processClientStarted(cookie) {
@@ -265,6 +359,40 @@ function processClientStarted(cookie) {
     setStatustoClient(cookie, "Login");
 }
 
+function processUserLoginRest(data) {
+    if(typeof this.counter == 'undefined' ) {
+	this.counter = 0;
+    }
+    this.counter++;
+    if(!data.username) {
+	servicelog("Illegal user login message");
+	return restErrorMessage("ERR_USER", "Invalid user login");
+    } else {
+	var user = getUserByHashedUserName(data.username);
+	if(user.length === 0) {
+	    servicelog("Unknown user login attempt");
+	    return restErrorMessage("ERR_USER", "Invalid user login");
+	} else {
+	    var aesKey = user[0].password;
+	    servicelog("User " + user[0].username + " logging in");
+	    var sessionKey = getNewSessionKey();
+	    var token = sha1.hash(JSON.stringify(new Date().getTime()) + this.counter).slice(0, 12);
+	    var serial = Math.floor(Math.random() * 1000000) + 10;
+	    var serialKey = { serial: serial, key: sessionKey };
+	    if(createSessionRest(sessionKey, user[0].username, token, serial)) {
+		return JSON.stringify({ errorcode: "ERR_OK",
+					error: "OK",
+					type: "T_CHALLENGE",
+					token: token,
+					serialKey: Aes.Ctr.encrypt(JSON.stringify(serialKey),
+								       aesKey, 128)}, null, 4);
+	    } else {
+		return restErrorMessage("ERR_SESSION", "Cannot create session");
+	    }
+	}
+    }
+}
+
 function processUserLogin(cookie, content) {
     var sendable;
     if(!content.username) {
@@ -288,6 +416,50 @@ function processUserLogin(cookie, content) {
 			 content: plainChallenge };
 	    sendCipherTextToClient(cookie, sendable);
 	}
+    }
+}
+
+function processGetUiWindowRest(url, data) {
+    var session = getSessionByToken(data.token);
+    var user = getUserByUsername(session.username);
+    var serialToken = JSON.parse(Aes.Ctr.decrypt(data.data, session.key, 128));
+    if((serialToken.token === session.token) &&
+       (parseInt(serialToken.serial) === (parseInt(session.serial) + 1))) {
+	servicelog("Verified incoming message");
+	session = refreshSessionByToken(session.token);
+	return(returnUiWindowRest(session, url.split("/")[3]));
+    } else {
+	servicelog("Incoming message verification failed");
+	return restErrorMessage("ERR_VERIFY", "Cannot verify message");
+    }
+}
+
+function returnUiWindowRest(session, window) {
+    servicelog("STARTING: returnUiWindowRest, window: " + window)
+    if(window === "0") {
+	return(createMainWindowRest(session));
+    }
+    return restErrorMessage("ERR_UNKNOWNWINDOW", "Cannot create window");
+}
+
+function createMainWindowRest(session) {
+    servicelog("STARTING: createMainWindowRest")
+    if(getUserPriviliges(getUserByUsername(session.username)).length === 0) {
+	// for unpriviliged login, only send logout button and nothing more
+	data = { type: "unpriviligedLogin",
+		 serial: session.serial,
+		 content: { topButtonList: [{ id: 100,
+					      text: "Log Out",
+					      callbackMessage: "clientStarted" }]}};
+	return JSON.stringify({ errorcode: "ERR_OK",
+				error: "OK",
+				type: "T_UIWINDOWREQUEST",
+				token: session.token,
+				data: Aes.Ctr.encrypt(JSON.stringify(data), session.key, 128)}, null, 4);
+	servicelog("Sent unpriviligedLogin info to client");
+    } else {
+	// Login succeeds, start the UI engine
+//	runCallbacByName("processResetToMainState", cookie);
     }
 }
 
@@ -392,6 +564,44 @@ function processValidateAccountMessage(cookie, content) {
 
 
 // Pending list handling
+
+function createSessionRest(key, username, token, serial) {
+    var sessionData = runCallbacByName("datastorageRead", "session");
+    var request = { key: key,
+		    token: token,
+		    date: new Date().getTime(),
+		    serial: serial,
+		    username: username }
+    sessionData.session.push(request);
+    if(runCallbacByName("datastorageWrite", "session", sessionData) === false) {
+	servicelog("Session database write failed");
+	return false;
+    } else {
+	servicelog("Created new session");
+	return true;
+    }
+}
+
+function refreshSessionByToken(token) {
+    servicelog("Updating session");
+    var newSessionData = [];
+    var session;
+    runCallbacByName("datastorageRead", "session").session.forEach(function(s) {
+	if(s.token === token) {
+	    s.date = new Date().getTime();
+	    s.serial = parseInt(s.serial) + 2;
+	    session = s;
+	}
+	newSessionData.push(s);
+    });
+    if(runCallbacByName("datastorageWrite", "session", {session: newSessionData}) === false) {
+	servicelog("Session database write failed");
+	return false;
+    } else {
+	servicelog("Updated session");
+	return session;
+    }
+}
 
 function createPendingRequest(cookie, recipientAddress) {
     removePendingRequest(cookie, recipientAddress);
@@ -1283,6 +1493,7 @@ function initializeDataStorages() {
 								    phone: "",
 								    language: runCallbacByName("datastorageRead",
 											       "main").main.defaultLanguage } ] }, true);
+    runCallbacByName("datastorageInitialize", "session", { session: [] });
     runCallbacByName("datastorageInitialize", "pending", { pending: [] }, true);
     runCallbacByName("datastorageInitialize", "email", { host: "smtp.your-email.com",
 							 user: "username",
@@ -1291,6 +1502,9 @@ function initializeDataStorages() {
 							 ssl: true,
 							 blindlyTrust: true });
     runCallbacByName("datastorageInitialize", "language", { languages: [], dictionary: [] });
+
+    // sessions are cleared between restarts
+    runCallbacByName("datastorageWrite", "session", { session: [] });
 }
 
 

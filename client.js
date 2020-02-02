@@ -3,6 +3,9 @@ var mySocket = new WebSocket("ws://" + site + ":" + WEBSOCK_PORT + "/");
 var sessionPassword;
 var connectionTimerId;
 
+var sessionToken;
+var sessionKey;
+
 if(window.NodeList && !NodeList.prototype.forEach) {
     NodeList.prototype.forEach = function(callback, thisArg) {
         thisArg = thisArg || window;
@@ -12,6 +15,71 @@ if(window.NodeList && !NodeList.prototype.forEach) {
     };
 }
 
+function postData(restPath, data) {
+    var xhr = new XMLHttpRequest();
+    url = "http://" + site + ":" + WEBSOCK_PORT + restPath;
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.onreadystatechange = function () {
+	if (xhr.readyState === 4 && xhr.status === 200) {
+            var data = JSON.parse(xhr.responseText);
+            console.log("JSON Data: " + JSON.stringify(data));
+	    processRestReplyMessaage(data);
+	}
+    };
+    xhr.send(JSON.stringify(data));
+}
+
+
+// this requests the login screen with a REST call...
+postData("/api/start", {});
+connectionTimerId = setTimeout(function() { 
+    document.getElementById("myStatusField").value = "No connection to server";
+}, 2000);
+
+
+function processRestReplyMessaage(data) {
+    if(data.errorcode === "ERR_OK") {
+	if(data.type === "T_CHALLENGE") {
+	    sessionToken = data.token;
+	    serialKey = JSON.parse(Aes.Ctr.decrypt(data.serialKey, sessionPassword, 128));
+	    sessionKey = serialKey.key;
+	    console.log("sessionToken: " + sessionToken);
+	    console.log("sessionKey:   " + sessionKey);
+	    serialToken = { serial: serialKey.serial + 1,
+			    token: sessionToken };
+	    postData("/api/window/0", { token: sessionToken,
+					data: Aes.Ctr.encrypt(JSON.stringify(serialToken),
+							      sessionKey, 128 )});
+	}
+	if(data.type === "T_LOGINUIREQUEST") {
+	    if(data.data.type === "createLoginUiPage") {
+		// loginUiPage is special, no top buttons defined
+		var div1 = document.createElement("div");
+		document.body.replaceChild(div1, document.getElementById("myDiv1"));
+		div1.id = "myDiv1";
+		document.body.replaceChild(createUiPage(data.data.content),
+					   document.getElementById("myDiv2"));
+		clearTimeout(connectionTimerId);
+	    }
+	}
+	if(data.type === "T_UIWINDOWREQUEST") {
+	    var data = JSON.parse(Aes.Ctr.decrypt(data.data, sessionKey, 128));
+	    if(data.type == "unpriviligedLogin") {
+		var div = document.createElement('div');
+		div.id = "myDiv2";
+		document.body.replaceChild(createTopButtons(data.content),
+					   document.getElementById("myDiv1"));
+		document.body.replaceChild(div, document.getElementById("myDiv2"));
+	    }
+	}
+	if(data.type === "T_GENERICUIREQUEST") {
+	    //
+	}
+    }
+}
+
+/*
 mySocket.onopen = function (event) {
     var sendable = {type:"clientStarted", content:"none"};
     mySocket.send(JSON.stringify(sendable));
@@ -20,6 +88,7 @@ mySocket.onopen = function (event) {
 	document.getElementById("myStatusField").value = "No connection to server";
     }, 2000);
 };
+*/
 
 mySocket.onmessage = function (event) {
     var receivable = JSON.parse(event.data);
