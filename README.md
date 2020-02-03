@@ -51,7 +51,12 @@ The user settings modification dialog reuses the same process and hence an entry
 
 ## REST API description
 
+The server exposes REST API on http://server:port/api/ url. All calls are HTTP POST, if there are no input parameters then an empty list is offered. On the base url http://server:port/ the server returns the client code that calls back to the server API and starts using it. All responses contain at least the result of the operation "result:{result:<errorcode>, text:<explanation>}" 
 
+### Authentication
+
+http POST //server:port/api/login { username:<hashedUsername> }  -->
+<-- {result:{...}, session:token, serialKey:{serial:serial, key:sessionKey}}
 
 ## License
 

@@ -39,8 +39,19 @@ connectionTimerId = setTimeout(function() {
 
 
 function processRestReplyMessaage(data) {
-    if(data.errorcode === "ERR_OK") {
-	if(data.type === "T_CHALLENGE") {
+    if(data.result.result === "E_OK") {
+	if(data.type === "T_LOGINUIREQUEST") {
+	    if(data.data.type === "createUiPage") {
+		// loginUiPage is special, no top buttons defined
+		var div1 = document.createElement("div");
+		document.body.replaceChild(div1, document.getElementById("myDiv1"));
+		div1.id = "myDiv1";
+		document.body.replaceChild(createUiPage(data.data.content),
+					   document.getElementById("myDiv2"));
+		clearTimeout(connectionTimerId);
+	    }
+	}
+	if(data.type === "T_LOGIN") {
 	    sessionToken = data.token;
 	    serialKey = JSON.parse(Aes.Ctr.decrypt(data.serialKey, sessionPassword, 128));
 	    sessionKey = serialKey.key;
@@ -51,17 +62,6 @@ function processRestReplyMessaage(data) {
 	    postData("/api/window/0", { token: sessionToken,
 					data: Aes.Ctr.encrypt(JSON.stringify(serialToken),
 							      sessionKey, 128 )});
-	}
-	if(data.type === "T_LOGINUIREQUEST") {
-	    if(data.data.type === "createLoginUiPage") {
-		// loginUiPage is special, no top buttons defined
-		var div1 = document.createElement("div");
-		document.body.replaceChild(div1, document.getElementById("myDiv1"));
-		div1.id = "myDiv1";
-		document.body.replaceChild(createUiPage(data.data.content),
-					   document.getElementById("myDiv2"));
-		clearTimeout(connectionTimerId);
-	    }
 	}
 	if(data.type === "T_UIWINDOWREQUEST") {
 	    var data = JSON.parse(Aes.Ctr.decrypt(data.data, sessionKey, 128));
