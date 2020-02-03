@@ -39,15 +39,19 @@ Default username is "test" and password is "test"
     
 ## Documentation
 
-# User session handling
+### User session handling
 
 The session is identified by port connection and stored in a transient cookie in the global cookie list. When user has authenticated the cookie contains the AES key used to encode the transmission between server and client.
 
-# User creation and change management
+### User creation and change management
 
 The user self-creation and management centers on the pending list handling. When an user creates a modifiaction request a corresponding entry is created into the pending list. On completing the modifiaction the entry is purged from the pending list.
 
 The user settings modification dialog reuses the same process and hence an entry is created into the list even though active user sesion is in force and this would not be absolutely necessary.
+
+## REST API description
+
+
 
 ## License
 
