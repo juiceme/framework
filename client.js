@@ -40,9 +40,10 @@ connectionTimerId = setTimeout(function() {
 
 function processRestReplyMessaage(data) {
     if(data.result.result === "E_OK") {
-	if(data.type === "T_LOGINUIREQUEST") {
+	if((data.type === "T_LOGINUIREQUEST") ||
+	   (data.type === "T_VERIFYREQUEST")) {
 	    if(data.data.type === "createUiPage") {
-		// loginUiPage is special, no top buttons defined
+		// loginUiPage has no top buttons defined
 		var div1 = document.createElement("div");
 		document.body.replaceChild(div1, document.getElementById("myDiv1"));
 		div1.id = "myDiv1";
@@ -51,7 +52,18 @@ function processRestReplyMessaage(data) {
 		clearTimeout(connectionTimerId);
 	    }
 	}
-	if(data.type === "T_LOGIN") {
+	if(data.type === "T_USERMODIFICATIONUIREQUEST") {
+	    userModificationData = JSON.parse(Aes.Ctr.decrypt(data.data, sessionPassword, 128));
+	    if(userModificationData.type === "createUiPage") {
+		// user modification panel has no top buttons
+		var div1 = document.createElement("div");
+		document.body.replaceChild(div1, document.getElementById("myDiv1"));
+		div1.id = "myDiv1";
+		document.body.replaceChild(createUiPage(userModificationData.content),
+					   document.getElementById("myDiv2"));
+	    }
+	}
+	if(data.type === "T_LOGINGRANTED") {
 	    sessionToken = data.token;
 	    serialKey = JSON.parse(Aes.Ctr.decrypt(data.serialKey, sessionPassword, 128));
 	    sessionKey = serialKey.key;
@@ -184,7 +196,7 @@ function handleIncomingMessage(defragmentedMessage) {
 function createUiPage(inputData) {
     var fieldset = document.createElement('fieldsetset');
     var id = 2001;
-
+    
     inputData.frameList.forEach(function(f) {
 	fieldset.appendChild(document.createElement('br'));
 	if(f.frameType === "fixedListFrame") {

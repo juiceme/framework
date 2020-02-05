@@ -147,22 +147,28 @@ function handleRestMessage(url, postData) {
     if(url.split("/")[2] === "login") {
 	return processUserLoginRest(postData);
     }
-    if(url.split("/")[2] === "passwordrecovery") {
+    if(url.split("/")[2] === "passwordrecovery") {             // sendpasswordemail (set next state to login) & validateaccount
 	return processCreateOrModifyAccountRest(postData);
     }
     
-    if(url.split("/")[2] === "sendpasswordemail") {
+    if(url.split("/")[2] === "sendpasswordemail") {            // E_OK
 	return processAccountRequestMessageRest(postData);
     }
     
-    if(url.split("/")[2] === "validateaccount") {
+    if(url.split("/")[2] === "validateaccount") {              // useraccountchange  >>> set next state to login 
 	return processValidateAccountMessageRest(postData);
     }
 
-    if(url.split("/")[2] === "useraccountchange") {
+    if(url.split("/")[2] === "useraccountchange") {            // E_OK
 	servicelog('got data: ' + JSON.stringify(postData));
 	return processUserAccountChangeMessageRest(postData);
     }
+
+    if(url.split("/")[2] === "xyzzy") {
+	servicelog('got data: ' + JSON.stringify(postData));
+	return Rest(postData);
+    }
+    
 
     if(url.split("/")[2] === "window") {
 	return(processGetUiWindowRest(url, postData));	
@@ -431,9 +437,9 @@ function processUserLoginRest(data) {
 	    var serialKey = Aes.Ctr.encrypt(JSON.stringify({ serial: serial, key: sessionKey }), aesKey, 128);
 	    if(createSessionRest(sessionKey, user[0].username, token, serial)) {
 		return { result: restStatusMessage("E_OK"),
-			 type: "T_LOGIN",
+			 type: "T_LOGINGRANTED",
 			 token: token,
-			 serialKey: serialkey };
+			 serialKey: serialKey };
 	    } else {
 		return {result: restStatusMessage("E_CREATESESSION")};
 	    }
@@ -560,7 +566,7 @@ function processCreateOrModifyAccountRest(data) {
                      items: items };
     var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
     return { result: restStatusMessage("E_OK"),
-	     type: "T_LOGINUIREQUEST",
+	     type: "T_VERIFYREQUEST",
 	     data: { type: "createUiPage",
                      content: { frameList: frameList,
 				buttonList: [ { id: 501,
@@ -594,7 +600,8 @@ function processCreateOrModifyAccount(cookie) {
 function processAccountRequestMessageRest(data) {
     servicelog("Request for email verification: [" + data.email + "]");
     sendVerificationEmailRest(data.email);
-    
+    // send login panel
+    return processClientStartedRest();
 }
 
 function processAccountRequestMessage(cookie, content) {
@@ -634,7 +641,7 @@ function processValidateAccountMessageRest(data) {
 	    newAccount.phone = user.phone;
 	    newAccount.language = user.language;
 	}
-	return sendUserAccountModificationDialogRest(newAccount);
+	return sendUserAccountModificationDialogRest(newAccount, request.token.key);
     }
 }
 
@@ -848,7 +855,7 @@ function removePendingRequest(emailAdress) {
     }
 }
 
-function sendUserAccountModificationDialogRest(account) {
+function sendUserAccountModificationDialogRest(account, key) {
     var title = "";
     var configurationItems = [];
     configurationItems.push([ [ createUiTextNode("email", getLanguageText(null, "TERM_EMAIL") + ":") ],
@@ -886,16 +893,18 @@ function sendUserAccountModificationDialogRest(account) {
 				      items: [ [ [ createUiFunctionButton(getLanguageText(null, "BUTTON_DELETEACCOUNT"), "if(confirm('" + getLanguageText(null, 'PROMPT_CONFIRMDELETEACCOUNT') + "')) { sendToServerEncrypted('deleteAccountMessage', { }); }") ] ] ] };
 	frameList.push({ frameType: "fixedListFrame", frame: deleteAccountItemList });
     }
+    var data = { type: "createUiPage",
+                 content: { frameList: frameList,
+			    buttonList: [ { id: 501,
+					    text: getLanguageText(null, "BUTTON_CANCEL"),
+					    callbackFunction: "sessionPassword=''; postData('/api/start', {}); return false;" },
+					  { id: 502,
+					    text: getLanguageText(null, "BUTTON_OK"),
+					    callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); postData('/api/useraccountchange', Aes.Ctr.encrypt(JSON.stringify({ userData: userData }), sessionPassword, 128)); return false;" }]}};
+	
     return { result: restStatusMessage("E_OK"),
-	     type: "T_LOGINUIREQUEST",
-	     data: { type: "createUiPage",
-                     content: { frameList: frameList,
-				buttonList: [ { id: 501,
-						text: getLanguageText(null, "BUTTON_CANCEL"),
-						callbackFunction: "sessionPassword=''; postData('/api/start', {}); return false;" },
-					      { id: 502,
-						text: getLanguageText(null, "BUTTON_OK"),
-						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); postData('/api/useraccountchange', { userData: userData }); return false;" }]}}};
+	     type: "T_USERMODIFICATIONUIREQUEST",
+	     data: Aes.Ctr.encrypt(JSON.stringify(data), key, 128) };
 }
 
 function sendUserAccountModificationDialog(cookie, account) {
@@ -995,10 +1004,10 @@ function processUserAccountChangeMessageRest(data) {
     changeUserAccount(account);
     if(request.sendEmailMessages) {
 	sendConfirmationEmails(account);
-	return {result: restStatusMessage("E_UNIMPLEMENTED")};
+	return {result: restStatusMessage("E_OK")};
     } else {
 	servicelog("User account changed.");
-	return {result: restStatusMessage("E_UNIMPLEMENTED")};
+	return {result: restStatusMessage("E_OK")};
     }
 }
 
@@ -1552,8 +1561,7 @@ function sendVerificationEmailRest(recipientAddress) {
 			from: runCallbacByName("datastorageRead", "email").sender,
 			to: recipientAddress,
 			subject: emailSubject };
-    sendEmailRest(mailDetails, false, "account verification", false, false);
-    return {result: restStatusMessage("E_OK")};
+    sendEmailRest(mailDetails, "account verification", false, false);
 }
 
 function sendVerificationEmail(cookie, recipientAddress) {
@@ -1612,7 +1620,7 @@ function sendConfirmationEmails(account) {
 			from: runCallbacByName("datastorageRead", "email").sender,
 			to: account.email,
 			subject: emailSubject };
-    sendEmailRest(mailDetails, false, "account confirmation", false, false);
+    sendEmailRest(mailDetails, "account confirmation", false, false);
     var adminUserEmails = runCallbacByName("datastorageRead", "users").users.map(function(u) {
 	if(userHasPrivilige("system-admin", u)) { return u.email; }
     }).filter(function(f){return f;}).forEach(function(m) {
@@ -1620,7 +1628,7 @@ function sendConfirmationEmails(account) {
 			    from: runCallbacByName("datastorageRead", "email").sender,
 			    to: m,
 			    subject: adminEmailSubject };
-	sendEmailRest(mailDetails, false, "admin confirmation", false, false);
+	sendEmailRest(mailDetails, "admin confirmation", false, false);
     });
 }
 
