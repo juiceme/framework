@@ -28,15 +28,29 @@ class ExampleConnection:
             if resp["result"]["result"] != "E_OK":
                 print(resp["result"]["text"])
             else:
-#                print("TOKEN: " + resp["token"])
-#                print("serialKey: " + resp["serialKey"])
+                self.token = resp["token"]
                 plaintext = pyaes.decrypt_message(hashed_password, resp["serialKey"])
-                self.key = json.loads(plaintext)
+                self.serial = json.loads(plaintext)["serial"]
+                self.key = json.loads(plaintext)["key"]
                 print("login succeeded")
+
+    def get_window(self, number):
+        url = "http://" + self.server + ":" + self.port + "/api/window/" + str(number)
+        data = { "token": self.token,
+                 "data": pyaes.encrypt_message(self.key,
+                                               json.dumps( { "serial": self.serial + 1,
+                                                             "token": self.token } ) ) }
+        res = requests.post(url, data=json.dumps(data))
+        if res.status_code != 200:
+            print("Error: cannot post message")
+            return
+        else:
+            print("OK")
+
     
 #---------------
 
 connection = ExampleConnection("localhost", "8080")
 connection.do_login("test", "test")
-
+connection.get_window(0)
 

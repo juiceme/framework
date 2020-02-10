@@ -170,7 +170,7 @@ def decrypt_message(password, ciphertext):
         plaintext[b] = "".join(plaintxtbyte)
     return  "".join(plaintext)
 
-def encrypt_message(password, ciphertext):
+def encrypt_message(password, plaintext):
     return "baa"
 
 
