@@ -1,8 +1,8 @@
 import binascii
 import base64
 import math
-from Crypto.Cipher import AES
-from Crypto.Util import Counter
+import random
+import time
 
 rCon = [ [0x00, 0x00, 0x00, 0x00],
          [0x01, 0x00, 0x00, 0x00],
@@ -135,7 +135,7 @@ def decrypt_message(password, ciphertext):
     nbytes = 16
     blocksize = 16
     pwBytes = []
-    for i in range(16):
+    for i in range(blocksize):
         pwBytes.append(ord(password[i]))
     key = aes_cipher(pwBytes, key_expansion(pwBytes))
     counter_block = [ ]
@@ -171,6 +171,64 @@ def decrypt_message(password, ciphertext):
     return  "".join(plaintext)
 
 def encrypt_message(password, plaintext):
-    return "baa"
+    print(plaintext)
+#    plaintext = base64.b64decode(plaintext)
+    nbytes = 16
+    blocksize = 16
+
+    pwBytes = []
+    for i in range(16):
+        pwBytes.append(ord(password[i]))
+    key = aes_cipher(pwBytes, key_expansion(pwBytes))
+   
+    counter_block = [ ]
+    for i in range(blocksize):
+        counter_block.append(0)
+
+    nonce = int(time.time()*1000)
+    nonceMs = nonce%1000;
+    nonceSec = math.floor(nonce/1000)
+    nonceRnd = math.floor(random.random()*0xffff)
+
+    counterBlock = []
+    for i in range(blocksize):
+        counterBlock.append(0)
+        
+    for i in range(2):
+        counterBlock[i] = (nonceMs >> i*8) & 0xff
+    for i in range(2):
+        counterBlock[i+2] = (nonceRnd >> i*8) & 0xff
+    for i in range(4):
+        counterBlock[i+4] = (nonceSec >> i*8) & 0xff
+        
+    ctrTxt = ''
+    for i in range(8):
+        ctrTxt += chr(counterBlock[i])
+
+    keySchedule = key_expansion(key)
+    blockCount = math.ceil(len(plaintext)/blocksize)
+    ciphertxt = []
+    for i in range(blockCount):
+        ciphertxt.append(0)
+
+    for b in range(blockCount):
+        for c in range(4):
+            counterBlock[15-c] = (b >> c*8) & 0xff
+#        for c in range(4):
+#            counterBlock[15-c-4] = (int(b/0x100000000) >> c*8)
+        cipherCntr = aes_cipher(counterBlock, keySchedule)
+        if b < blockCount-1:
+            blockLength = blocksize
+        else:
+            blockLength = (len(plaintext)-1) % blocksize+1
+        cipherChar = []
+        for i in range(blockLength):
+            cipherChar.append(0)
+        for i in range(blockLength):
+            cipherChar[i] = cipherCntr[i] ^ ord(plaintext[b*blocksize+i])
+            cipherChar[i] = chr(cipherChar[i])
+        ciphertxt[b] = "".join(cipherChar)
+    return "".join(ciphertxt)
+
 
 
