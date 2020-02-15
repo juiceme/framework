@@ -132,12 +132,11 @@ def aes_cipher(input, w):
 
 def decrypt_message(password, ciphertext):
     ciphertext = base64.b64decode(ciphertext)
-    nbytes = 16
     blocksize = 16
-    pwBytes = []
+    pwbytes = []
     for i in range(blocksize):
-        pwBytes.append(ord(password[i]))
-    key = aes_cipher(pwBytes, key_expansion(pwBytes))
+        pwbytes.append(ord(password[i]))
+    key = aes_cipher(pwbytes, key_expansion(pwbytes))
     counter_block = [ ]
     for i in range(16):
         counter_block.append(0)
@@ -171,64 +170,52 @@ def decrypt_message(password, ciphertext):
     return  "".join(plaintext)
 
 def encrypt_message(password, plaintext):
-    print(plaintext)
-#    plaintext = base64.b64decode(plaintext)
-    nbytes = 16
     blocksize = 16
-
-    pwBytes = []
+    pwbytes = []
     for i in range(16):
-        pwBytes.append(ord(password[i]))
-    key = aes_cipher(pwBytes, key_expansion(pwBytes))
-   
+        pwbytes.append(ord(password[i]))
+    key = aes_cipher(pwbytes, key_expansion(pwbytes))
     counter_block = [ ]
     for i in range(blocksize):
         counter_block.append(0)
-
     nonce = int(time.time()*1000)
-    nonceMs = nonce%1000;
-    nonceSec = math.floor(nonce/1000)
-    nonceRnd = math.floor(random.random()*0xffff)
-
-    counterBlock = []
-    for i in range(blocksize):
-        counterBlock.append(0)
-        
+    nonce_ms = nonce%1000;
+    nonce_sec = math.floor(nonce/1000)
+    nonce_rnd = math.floor(random.random()*0xffff)
     for i in range(2):
-        counterBlock[i] = (nonceMs >> i*8) & 0xff
+        counter_block[i] = (nonce_ms >> i*8) & 0xff
     for i in range(2):
-        counterBlock[i+2] = (nonceRnd >> i*8) & 0xff
+        counter_block[i+2] = (nonce_rnd >> i*8) & 0xff
     for i in range(4):
-        counterBlock[i+4] = (nonceSec >> i*8) & 0xff
-        
-    ctrTxt = ''
+        counter_block[i+4] = (nonce_sec >> i*8) & 0xff
+    ctrtxt = ''
     for i in range(8):
-        ctrTxt += chr(counterBlock[i])
+        ctrtxt += chr(counter_block[i])
+    key_schedule = key_expansion(key)
+    blockcount = math.ceil(len(plaintext)/blocksize)
+    ciphertext = []
+    for i in range(blockcount):
+        ciphertext.append(0)
 
-    keySchedule = key_expansion(key)
-    blockCount = math.ceil(len(plaintext)/blocksize)
-    ciphertxt = []
-    for i in range(blockCount):
-        ciphertxt.append(0)
-
-    for b in range(blockCount):
+    for b in range(blockcount):
         for c in range(4):
-            counterBlock[15-c] = (b >> c*8) & 0xff
-#        for c in range(4):
-#            counterBlock[15-c-4] = (int(b/0x100000000) >> c*8)
-        cipherCntr = aes_cipher(counterBlock, keySchedule)
-        if b < blockCount-1:
-            blockLength = blocksize
+            counter_block[15-c] = (b >> c*8) & 0xff
+        for c in range(4):
+            counter_block[15-c-4] = (int(b/0x100000000) >> c*8)
+        cipher_counter = aes_cipher(counter_block, key_schedule)
+        if b < blockcount-1:
+            blocklength = blocksize
         else:
-            blockLength = (len(plaintext)-1) % blocksize+1
-        cipherChar = []
-        for i in range(blockLength):
-            cipherChar.append(0)
-        for i in range(blockLength):
-            cipherChar[i] = cipherCntr[i] ^ ord(plaintext[b*blocksize+i])
-            cipherChar[i] = chr(cipherChar[i])
-        ciphertxt[b] = "".join(cipherChar)
-    return "".join(ciphertxt)
+            blocklength = (len(plaintext)-1) % blocksize+1
+        cipher_char = []
+        for i in range(blocklength):
+            cipher_char.append(0)
+        for i in range(blocklength):
+            cipher_char[i] = cipher_counter[i] ^ ord(plaintext[b*blocksize+i])
+            cipher_char[i] = chr(cipher_char[i])
+        ciphertext[b] = "".join(cipher_char)
+    ciphertext =  ctrtxt + "".join(ciphertext)
+    return base64.urlsafe_b64encode(ciphertext.encode('latin-1')).decode()
 
 
 
