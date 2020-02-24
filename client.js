@@ -1,10 +1,8 @@
 var site = window.location.hostname;
-var mySocket = new WebSocket("ws://" + site + ":" + WEBSOCK_PORT + "/");
-var sessionPassword;
 var connectionTimerId;
-
 var sessionToken;
 var sessionKey;
+var sessionSerial;
 
 if(window.NodeList && !NodeList.prototype.forEach) {
     NodeList.prototype.forEach = function(callback, thisArg) {
@@ -17,43 +15,63 @@ if(window.NodeList && !NodeList.prototype.forEach) {
 
 function postData(restPath, data) {
     var xhr = new XMLHttpRequest();
-    url = "http://" + site + ":" + WEBSOCK_PORT + restPath;
+    url = "http://" + site + ":" + LISTEN_PORT + restPath;
     xhr.open("POST", url, true);
     xhr.setRequestHeader("Content-Type", "application/json");
     xhr.onreadystatechange = function () {
 	if (xhr.readyState === 4 && xhr.status === 200) {
-            var data = JSON.parse(xhr.responseText);
-            console.log("JSON Data: " + JSON.stringify(data));
-	    processRestReplyMessaage(data);
+	    try {
+		var data = JSON.parse(xhr.responseText);
+		console.log("JSON Data: " + JSON.stringify(data));
+		processRestReplyMessage(data);
+	    } catch(err) {
+		console.log("Received illegal api call: " + err);
+//		postData("/api/start", {});
+	    }
 	}
     };
     xhr.send(JSON.stringify(data));
 }
 
+function postEncrypted(url, data) {
+    sessionSerial++;
+    var serialTokenData = { serial: sessionSerial,
+			    token: sessionToken,
+			    data: data };
+    postData(url, { token: sessionToken,
+		    data: Aes.Ctr.encrypt(JSON.stringify(serialTokenData), sessionKey, 128) });
+}
 
-// this requests the login screen with a REST call...
+function displayMessage(message) {
+    document.getElementById("myStatusField").value = message;
+}
+
+// this requests the login screen with a REST call
 postData("/api/start", {});
 connectionTimerId = setTimeout(function() { 
     document.getElementById("myStatusField").value = "No connection to server";
 }, 2000);
 
-
-function processRestReplyMessaage(data) {
+// main client message loop
+function processRestReplyMessage(data) {
     if(data.result.result === "E_OK") {
-	if((data.type === "T_LOGINUIREQUEST") ||
-	   (data.type === "T_VERIFYREQUEST")) {
+	clearTimeout(connectionTimerId);
+	if((data.type === "T_LOGINUI") ||
+	   (data.type === "T_VERIFYUI")) {
+	    // messages are not encrypted
 	    if(data.data.type === "createUiPage") {
-		// loginUiPage has no top buttons defined
+		// top buttons are not defined
 		var div1 = document.createElement("div");
 		document.body.replaceChild(div1, document.getElementById("myDiv1"));
 		div1.id = "myDiv1";
 		document.body.replaceChild(createUiPage(data.data.content),
 					   document.getElementById("myDiv2"));
-		clearTimeout(connectionTimerId);
+		displayMessage(data.message);
 	    }
 	}
-	if(data.type === "T_USERMODIFICATIONUIREQUEST") {
-	    userModificationData = JSON.parse(Aes.Ctr.decrypt(data.data, sessionPassword, 128));
+	if(data.type === "T_USERMODIFICATIONUI") {
+	    userModificationData = JSON.parse(Aes.Ctr.decrypt(data.data,
+							      sessionKey, 128));
 	    if(userModificationData.type === "createUiPage") {
 		// user modification panel has no top buttons
 		var div1 = document.createElement("div");
@@ -61,21 +79,22 @@ function processRestReplyMessaage(data) {
 		div1.id = "myDiv1";
 		document.body.replaceChild(createUiPage(userModificationData.content),
 					   document.getElementById("myDiv2"));
+		displayMessage(data.message);
 	    }
 	}
-	if(data.type === "T_LOGINGRANTED") {
+	if(data.type === "T_LOGIN") {
+	    displayMessage(data.message);
 	    sessionToken = data.token;
-	    serialKey = JSON.parse(Aes.Ctr.decrypt(data.serialKey, sessionPassword, 128));
+	    serialKey = JSON.parse(Aes.Ctr.decrypt(data.serialKey, sessionKey, 128));
 	    sessionKey = serialKey.key;
-	    console.log("sessionToken: " + sessionToken);
-	    console.log("sessionKey:   " + sessionKey);
-	    serialToken = { serial: serialKey.serial + 1,
-			    token: sessionToken };
-	    postData("/api/window/0", { token: sessionToken,
-					data: Aes.Ctr.encrypt(JSON.stringify(serialToken),
-							      sessionKey, 128 )});
+	    sessionSerial = serialKey.serial;
+	    console.log("sessionToken:  " + sessionToken);
+	    console.log("sessionKey:    " + sessionKey);
+	    console.log("sessionSerial: " + sessionSerial);
+	    postEncrypted("/api/window/0", {});
 	}
 	if(data.type === "T_UIWINDOWREQUEST") {
+	    displayMessage(data.message);
 	    var data = JSON.parse(Aes.Ctr.decrypt(data.data, sessionKey, 128));
 	    if(data.type == "unpriviligedLogin") {
 		var div = document.createElement('div');
@@ -84,109 +103,28 @@ function processRestReplyMessaage(data) {
 					   document.getElementById("myDiv1"));
 		document.body.replaceChild(div, document.getElementById("myDiv2"));
 	    }
+	    if(data.type == "createUiPage") {
+		document.body.replaceChild(createTopButtons(data.content),
+					   document.getElementById("myDiv1"));
+		document.body.replaceChild(createUiPage(data.content),
+					   document.getElementById("myDiv2"));
+	    }
+	}
+	if(data.type === "T_UINEWDOCUMENTWINDOWREQUEST") {
+	    displayMessage(data.message);
+	    var data = JSON.parse(Aes.Ctr.decrypt(data.data, sessionKey, 128));
+	    if(data.type == "showHtmlPage") {
+		var wnd = window.document.open("about:blank", "", "scrollbars=yes");
+		wnd.document.write(data.content);
+		wnd.document.close();
+	    }
 	}
 	if(data.type === "T_GENERICUIREQUEST") {
 	    //
 	}
-    }
-}
-
-/*
-mySocket.onopen = function (event) {
-    var sendable = {type:"clientStarted", content:"none"};
-    mySocket.send(JSON.stringify(sendable));
-    document.getElementById("myStatusField").value = "started";
-    connectionTimerId = setTimeout(function() { 
-	document.getElementById("myStatusField").value = "No connection to server";
-    }, 2000);
-};
-*/
-
-mySocket.onmessage = function (event) {
-    var receivable = JSON.parse(event.data);
-
-//    console.log("Received message: " + JSON.stringify(receivable));
-
-    if(receivable.type == "statusData") {
-        document.getElementById("myStatusField").value = receivable.content;
-    }
-
-    // createUiPage is only ever called in plaintext when establishong login session
-    if(receivable.type == "createUiPage") {
-	var div1 = document.createElement("div");
-	document.body.replaceChild(div1, document.getElementById("myDiv1"));
-	div1.id = "myDiv1";
-	document.body.replaceChild(createUiPage(receivable.content),
-				   document.getElementById("myDiv2"));
-	clearTimeout(connectionTimerId);
-    }
-
-    if(receivable.type == "payload") {
-	// payload is always encrypted, if authentication is not successiful then JSON parsing
-	// fails and client is restarted
-	try {
-	    var content = JSON.parse(Aes.Ctr.decrypt(receivable.content, sessionPassword, 128));
-	    defragmentIncomingMessage(content);
-	} catch(err) {
-	    var sendable = {type:"clientStarted", content:"none"};
-	    mySocket.send(JSON.stringify(sendable));
-	}
-    }
-}
-
-var incomingMessageBuffer = "";
-
-function defragmentIncomingMessage(decryptedMessage) {
-
-//    console.log("Decrypted incoming message: " + JSON.stringify(decryptedMessage));
-
-    if(decryptedMessage.type === "nonFragmented") {
-	handleIncomingMessage(JSON.parse(decryptedMessage.data));
-    }
-    if(decryptedMessage.type === "fragment") {
-	if(decryptedMessage.id === 0) {
-	    incomingMessageBuffer = decryptedMessage.data;
-	} else {
-	    incomingMessageBuffer = incomingMessageBuffer + decryptedMessage.data;
-	}
-    }
-    if(decryptedMessage.type === "lastFragment") {
-	incomingMessageBuffer = incomingMessageBuffer + decryptedMessage.data;
-	handleIncomingMessage(JSON.parse(incomingMessageBuffer));
-    }
-}
-
-function handleIncomingMessage(defragmentedMessage) {
-
-//    console.log("Defragmented incoming message: " + JSON.stringify(defragmentedMessage));
-
-    if(defragmentedMessage.type == "statusData") {
-        document.getElementById("myStatusField").value = defragmentedMessage.content;
-    }
-
-    if(defragmentedMessage.type == "loginChallenge") {
-	var cipheredResponce = Aes.Ctr.encrypt(defragmentedMessage.content, sessionPassword, 128);
-	sendToServer("loginResponse", cipheredResponce);
-    }
-
-    if(defragmentedMessage.type == "unpriviligedLogin") {
-	var div = document.createElement('div');
-	div.id = "myDiv2";
-	document.body.replaceChild(createTopButtons(defragmentedMessage.content), document.getElementById("myDiv1"));
-	document.body.replaceChild(div, document.getElementById("myDiv2"));
-    }
-
-    if(defragmentedMessage.type == "showHtmlPage") {
-	var wnd = window.document.open("about:blank", "", "scrollbars=yes");
-	wnd.document.write(defragmentedMessage.content);
-	wnd.document.close();
-    }
-
-    if(defragmentedMessage.type == "createUiPage") {
-	document.body.replaceChild(createTopButtons(defragmentedMessage.content),
-				   document.getElementById("myDiv1"));
-	document.body.replaceChild(createUiPage(defragmentedMessage.content),
-				   document.getElementById("myDiv2"));
+    } else {
+	// if we get a failure then restart over
+	// postData("/api/start", {});
     }
 }
 
@@ -196,7 +134,7 @@ function handleIncomingMessage(defragmentedMessage) {
 function createUiPage(inputData) {
     var fieldset = document.createElement('fieldsetset');
     var id = 2001;
-    
+
     inputData.frameList.forEach(function(f) {
 	fieldset.appendChild(document.createElement('br'));
 	if(f.frameType === "fixedListFrame") {
@@ -214,6 +152,7 @@ function createUiPage(inputData) {
 	    fieldset.appendChild(document.createElement('br'));
 	}
     });
+   
     fieldset.appendChild(document.createElement('br'));
     if(inputData.buttonList !== undefined) {
 	fieldset.appendChild(createAcceptButtons(inputData));
@@ -294,7 +233,7 @@ function createTopButtons(inputData) {
 	    button.id = b.id;
 	    if(b.callbackMessage != undefined) {
 		button.onclick = function() {
-		    sendToServerEncrypted(b.callbackMessage, inputData);
+		    postEncrypted(b.callbackMessage, inputData);
 		    return false;
 		};
 	    }
@@ -314,7 +253,7 @@ function createTopButtons(inputData) {
 function createAcceptButtons(inputData) {
     var table = document.createElement('table');
     var tableBody = document.createElement('tbody');
-    var tableRow = tableBody.insertRow();    
+    var tableRow = tableBody.insertRow();
 
     inputData.buttonList.forEach(function(b) {
 	var cell = document.createElement('td');
@@ -327,7 +266,7 @@ function createAcceptButtons(inputData) {
 				  priviliges: inputData.priviliges,
 				  items: refreshInputDataItems(inputData, false),
 				  buttonList: inputData.buttonList };
-		sendToServerEncrypted(b.callbackMessage, freshData);
+		postEncrypted(b.callbackMessage, freshData);
 		return false;
 	    };
 	}
@@ -582,12 +521,13 @@ function createTypedObject(id, item, inputData) {
 	    }
 	    if(i.callbackMessage != undefined) {
 		newItem.callbackMessage = i.callbackMessage;
-		button.onclick = function() { sendToServerEncrypted(i.callbackMessage,
-								    { buttonId: i.itemId,
-								      buttonData: i.data,
-								      items: refreshInputDataItems(inputData, false) });
-					      return false;
-					    };
+		button.onclick = function() {
+		    postEncrypted(i.callbackMessage, { buttonId: i.itemId,
+						       buttonData: i.data,
+						       items: refreshInputDataItems(inputData,
+										    false) });
+		    return false;
+		};
 	    }
 	    if(i.callbackFunction != undefined) {
 		button.onclick = Function(i.callbackFunction);
@@ -699,40 +639,3 @@ function getTypedObjectTemplateById(item, fullData) {
     return itemList;
 }
 
-
-
-// ---------- Utility helper functions
-
-
-function sendToServer(type, content) {
-    var sendable = { type: type, content: content };
-    mySocket.send(JSON.stringify(sendable));
-}
-
-function sendFragment(type, id, data) {
-    var fragment = JSON.stringify({ type: type, id: id, length: data.length, data: data });
-    var cipherSendable = JSON.stringify({ type: "payload",
-					  content: Aes.Ctr.encrypt(fragment, sessionPassword, 128) });
-    mySocket.send(cipherSendable);
-}
-
-var fragmentSize = 10000;
-
-function sendToServerEncrypted(type, content) {
-    var sendableString = JSON.stringify({ type: type, content: content });
-    var count = 0;
-    var originalLength = sendableString.length;
-    if(sendableString.length <= fragmentSize) {
-	sendFragment("nonFragmented", count++, sendableString);
-    } else {
-	while(sendableString.length > fragmentSize) {
-	    sendableStringFragment = sendableString.slice(0, fragmentSize);
-	    sendableString = sendableString.slice(fragmentSize, sendableString.length);
-	    sendFragment("fragment", count++, sendableStringFragment);
-	}
-	if(sendableString.length > 0) {
-	    sendFragment("lastFragment", count++, sendableString);
-	}
-    }
-//    console.log("Sent " + originalLength + " bytes in " + count + " fragments to server");
-}

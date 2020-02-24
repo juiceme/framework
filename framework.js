@@ -1,60 +1,33 @@
-var websocket = require("websocket");
 var http = require("http");
 var fs = require("fs");
 var email = require("emailjs/email");
 var Aes = require('./crypto/aes.js');
 Aes.Ctr = require('./crypto/aes-ctr.js');
 var sha1 = require('./crypto/sha1.js');
+var ui = require('./uielements.js');
 
-var websocPort = 0;
-var globalSalt = sha1.hash(JSON.stringify(new Date().getTime()));
-var fragmentSize = 10000;
+var listenPort = 0;
 var applicationName = "<name not set>";
+var globalSalt = sha1.hash(JSON.stringify(new Date().getTime()));
 
 function servicelog(s) {
     console.log((new Date()) + " --- " + s);
 }
 
-function setStatustoClient(cookie, status) {
-    if(cookie.aesKey === "") {
-	sendPlainTextToClient(cookie, { type: "statusData", content: status });
-    } else {
-	sendCipherTextToClient(cookie, { type: "statusData", content: status });
-    }
-}
-
-function sendPlainTextToClient(cookie, sendable) {
-    cookie.connection.send(JSON.stringify(sendable));
-}
-
-function sendFragment(cookie, type, id, data) {
-    var fragment = JSON.stringify({ type: type, id: id, length: data.length, data: data });
-    var cipherSendable = JSON.stringify({ type: "payload",
-					  content: Aes.Ctr.encrypt(fragment, cookie.aesKey, 128) });
-    cookie.connection.send(cipherSendable);
-}
-
-function sendCipherTextToClient(cookie, sendable) {
-    var sendableString = JSON.stringify(sendable);
-    var count = 0;
-    var originalLength = sendableString.length;
-    if(sendableString.length <= fragmentSize) {
-	sendFragment(cookie, "nonFragmented", count++, sendableString);
-    } else {
-	while(sendableString.length > fragmentSize) {
-	    sendableStringFragment = sendableString.slice(0, fragmentSize);
-	    sendableString = sendableString.slice(fragmentSize, sendableString.length);
-	    sendFragment(cookie, "fragment", count++, sendableStringFragment);
-	}
-	if(sendableString.length > 0) {
-	    sendFragment(cookie, "lastFragment", count++, sendableString);
-	}
-    }
-//    servicelog("Sent " + originalLength + " bytes in " + count + " fragments to server");
-}
-
 function getClientVariables() {
-    return "var WEBSOCK_PORT = " + websocPort + ";\n";
+    return "var LISTEN_PORT = " + listenPort + ";\n";
+}
+
+function setApplicationName(name) {
+    applicationName = name;
+}
+
+function encrypt(data, key) {
+    return Aes.Ctr.encrypt(JSON.stringify(data), key, 128);
+}
+
+function decrypt(data, key) {
+    return JSON.parse(Aes.Ctr.decrypt(data, key, 128));
 }
 
 function restStatusMessage(status) {
@@ -65,23 +38,20 @@ function restStatusMessage(status) {
     if(status === "E_OK") { text = "Success"; }
     if(status === "E_USER") { text = "Invalid user login attempt"; }
     if(status === "E_CREATESESSION") { text = "Cannot create user session"; }
-    if(status === "E_GETSESSION") { text = "Cannot get user session"; }
-    if(status === "E_REFRESHSESSION") { text = "Cannot refresh user session"; }
+    if(status === "E_VERIFYSESSION") { text = "Cannot verify user session"; }
     if(status === "E_VERIFY") { text = "Cannot verify message"; }
     if(status === "E_UNKNOWNWINDOW") { text = "Cannot create unknown window"; }
     if(status === "E_INTERNALERROR") { text = "Server internal error"; }
+    if(status === "E_PRIVILIGE") { text = "User does not have privilige"; }
     return {result:status, text:text};
 }
 
-function restErrorMessage(message) {
-    return("{\n    \"errorcode\": \"" + number + "\",\n    \"error\": \"" + message + "\"\n}\n");
-}
-
-var webServer = http.createServer(function(request, response){
-    
+var webServer = http.createServer(function(request, response){    
     request.on('data', function(textBuffer) {
 	try {
 	    if(request.method === "POST") {
+//		servicelog("---------------> " + textBuffer)
+//		servicelog("---------------> " + request.url)
 		var postData = JSON.parse(textBuffer.toString().replace(/'/g, '"'));
 		res = handleRestMessage(request.url, postData);
 		response.writeHeader(200, { "Content-Type": "text/html",
@@ -101,7 +71,6 @@ var webServer = http.createServer(function(request, response){
 	    response.end();
 	}
     });
-
     if(request.method === "GET") {
 	// api calls do not request client    
 	var clienthead = fs.readFileSync("./framework/clienthead", "utf8");
@@ -119,7 +88,6 @@ var webServer = http.createServer(function(request, response){
 	response.end();
 	servicelog("Respond with client to: " + JSON.stringify(request.headers));
     }
-    
     if(request.method === "PUT") {
 	response.writeHeader(200, { "Content-Type": "text/html",
                                     "X-Frame-Options": "deny",
@@ -129,7 +97,6 @@ var webServer = http.createServer(function(request, response){
 	response.end();
 	servicelog("Respond with client to: " + JSON.stringify(request.headers));
     }
-	
 });
 
 function handleRestMessage(url, postData) {
@@ -141,303 +108,93 @@ function handleRestMessage(url, postData) {
     }
 
     if(url.split("/")[2] === "start") {
-	return processClientStartedRest();
+	return processClientStarted("login");
     }
 
     if(url.split("/")[2] === "login") {
-	return processUserLoginRest(postData);
-    }
-    if(url.split("/")[2] === "passwordrecovery") {             // sendpasswordemail (set next state to login) & validateaccount
-	return processCreateOrModifyAccountRest(postData);
+	return processUserLogin(postData);
     }
     
-    if(url.split("/")[2] === "sendpasswordemail") {            // E_OK
-	return processAccountRequestMessageRest(postData);
+    if(url.split("/")[2] === "logout") {
+	return processUserLogout(postData);
     }
     
-    if(url.split("/")[2] === "validateaccount") {              // useraccountchange  >>> set next state to login 
-	return processValidateAccountMessageRest(postData);
+    if(url.split("/")[2] === "passwordrecovery") {
+	return processCreateOrModifyAccount(postData);
+    }
+    
+    if(url.split("/")[2] === "sendpasswordemail") {
+	return processAccountRequestMessage(postData);
+    }
+    
+    if(url.split("/")[2] === "validateaccount") {
+	return processValidateAccountMessage(postData);
     }
 
-    if(url.split("/")[2] === "useraccountchange") {            // E_OK
-	servicelog('got data: ' + JSON.stringify(postData));
-	return processUserAccountChangeMessageRest(postData);
+    if(url.split("/")[2] === "useraccountchange") {
+	if(url.split("/")[3] === "loggedin") {
+	    return processUserAccountChangeMessage(postData, true);
+	}
+	return processUserAccountChangeMessage(postData, false);
     }
 
+    if(url.split("/")[2] === "adminpanel") {
+	return processAdminPanelRequest(postData);
+    }
+
+    if(url.split("/")[2] === "useraccountpanel") {
+	return processUserAccountRequest(postData);
+    }
+    
     if(url.split("/")[2] === "xyzzy") {
 	servicelog('got data: ' + JSON.stringify(postData));
 	return Rest(postData);
     }
     
-
-    if(url.split("/")[2] === "window") {
-	return(processGetUiWindowRest(url, postData));	
-    }
-
-    return {result: restStatusMessage("E_FORMAT")};
-}
-
-wsServer = new websocket.server({
-    httpServer: webServer,
-    autoAcceptConnections: false
-});
-
-var connectionCount = 0;
-var connectionList = [];
-
-wsServer.on('request', function(request) {
-    servicelog("Connection from origin " + request.origin);
-    var connection = request.accept(null, request.origin);
-    var cookie = { count:connectionCount++, connection:connection, state:"new" };
-    var sendable;
-    var defaultUserRights = { priviliges: [ "none" ] }
-    servicelog("Client #" + cookie.count  + " accepted");
-
-    connectionList.push(cookie);
-    connection.on('message', function(message) {
-        if (message.type === 'utf8') {
-	    try {
-		var receivable = JSON.parse(message.utf8Data);
-	    } catch(err) {
-		servicelog("Received illegal message: " + err);
-		return;
+    if(url.split("/")[2] === "window") {    
+	if(url.split("/")[3] === "0") {
+	    var session = refreshSessionByToken(postData.token, postData.data);
+	    if(!session) {
+		servicelog("Window message session verification failed");
+		return {result: restStatusMessage("E_VERIFYSESSION")};
 	    }
-	    if(!receivable.type || !receivable.content) {
-		servicelog("Received broken message: " + JSON.stringify(receivable));
-		return;
-	    }
-
-//	    servicelog("Incoming message: " + JSON.stringify(receivable));
-	    var type = receivable.type;
-	    var content = receivable.content;
-
-            if(type === "clientStarted") { processClientStarted(cookie); }
-	    if(type === "userLogin") { processUserLogin(cookie, content); }
-	    if(type === "createOrModifyAccount") { processCreateOrModifyAccount(cookie, content); }
-	    if(type === "accountRequestMessage") { processAccountRequestMessage(cookie, content); }
-	    if(type === "validateAccountMessage") { processValidateAccountMessage(cookie, content); }
-	    if(type === "loginResponse") { processLoginResponse(cookie, content); }
-	    if(type === "payload") {
-		try {
-		    var decryptedMessage = JSON.parse(Aes.Ctr.decrypt(content, cookie.aesKey, 128));
-		    defragmentIncomingMessage(cookie, decryptedMessage);
-		} catch(err) {
-		    servicelog("Problem parsing JSON from message: " + err);
-		    return;
-		}
-	    }
-	}
-    });
-
-    connection.on('close', function(connection) {
-	servicelog("Client #" + cookie.count  + " disconnected");
-	var newConnectionList = [];
-	connectionList.forEach(function(c) {
-	    if(c.count != cookie.count) {
-		newConnectionList.push(c);
-	    }
-	});
-	connectionList = newConnectionList;
-        cookie = {};
-    });
-});
-
-function getConnectionList() {
-    return connectionList;
-}
-
-function defragmentIncomingMessage(cookie, decryptedMessage) {
-    if(decryptedMessage.type === "nonFragmented") {
-	handleIncomingMessage(cookie, JSON.parse(decryptedMessage.data));
-    }
-    if(decryptedMessage.type === "fragment") {
-	if(decryptedMessage.id === 0) {
-	    cookie.incomingMessageBuffer = decryptedMessage.data;
+	    return createMainWindow(session);
 	} else {
-	    cookie.incomingMessageBuffer = cookie.incomingMessageBuffer + decryptedMessage.data;
+	    // if not handled here, defer to application
+	    return runCallbackByName("handleApplicationMessage", url, postData)
 	}
     }
-    if(decryptedMessage.type === "lastFragment") {
-	cookie.incomingMessageBuffer = cookie.incomingMessageBuffer + decryptedMessage.data;
-	handleIncomingMessage(cookie, JSON.parse(cookie.incomingMessageBuffer));
-    }
+
+    // call that are not caught by framework are handled by application
+    return runCallbackByName("handleApplicationMessage", url, postData);
 }
 
-function handleIncomingMessage(cookie, decryptedMessage) {
-//    servicelog("Decrypted message: " + JSON.stringify(decryptedMessage));
-    if(decryptedMessage.type === "clientStarted") {
-	processClientStarted(cookie); }
-    if(decryptedMessage.type === "userAccountChangeMessage") {
-	processUserAccountChangeMessage(cookie, decryptedMessage.content); }
-    if(stateIs(cookie, "loggedIn")) {
-	if(decryptedMessage.type === "gainAdminMode") {
-	    processGainAdminMode(cookie, decryptedMessage.content); }
-	if(decryptedMessage.type === "saveAdminData") {
-	    processSaveAdminData(cookie, decryptedMessage.content); }
-	if(decryptedMessage.type === "changeUserPassword") {
-	    processChangeUserPassword(cookie, decryptedMessage.content); }
-	if(decryptedMessage.type === "getUserSettings") {
-	    processGetUserSettings(cookie, decryptedMessage.content); }
-	if(decryptedMessage.type === "deleteAccountMessage") {
-	    processDeleteAccountMessage(cookie, decryptedMessage.content); }
-	// if nothing here matches, jump to application message handler
-	runCallbacByName("handleApplicationMessage", cookie, decryptedMessage);
-    }
-}
-
-function stateIs(cookie, state) {
-    return (cookie.state === state);
-}
-
-function setState(cookie, state) {
-    cookie.state = state;
-}
-
-function getUserByHashedUserName(hash) {
-    return runCallbacByName("datastorageRead", "users").users.filter(function(u) {
-	return u.hash === hash;
-    });
-}
-
-function getUserByUsername(username) {
-    var user = runCallbacByName("datastorageRead", "users").users.filter(function(u) {
-	return u.username === username;
-    });
-    if(user.length === 0) {
-	return false;
-    } else {
-	return user[0];
-    }
-}
-
-function getSessionByToken(token) {
-    var session = runCallbacByName("datastorageRead", "session").session.filter(function(s) {
-	return s.token === token;
-    });
-    if(session.length === 0) {
-	return false;
-    } else {
-	return session[0];
-    }
-}
-
-function getUserPriviliges(user) {
-    if(user.applicationData.priviliges.length === 0) { return []; }
-    if(user.applicationData.priviliges.indexOf("none") > -1) { return []; }
-    return user.applicationData.priviliges;
-}
-
-function userHasPrivilige(privilige, user) {
-    if(user.applicationData.priviliges.length === 0) { return false; }
-    if(user.applicationData.priviliges.indexOf(privilige) < 0) { return false; }
-    return true;
-}
-
-function getPasswordHash(username, password) {
-    return sha1.hash(password + sha1.hash(username).slice(0,4));
-}
-
-function getNewChallenge() {
-    return ("challenge_" + sha1.hash(globalSalt + new Date().getTime().toString()) + "1");
-}
-
-function getNewSessionKey() {
-    if(typeof this.counter == 'undefined' ) {
-	this.counter = 0;
-    }
-    this.counter++;
-    return (sha1.hash(globalSalt + new Date().getTime().toString() + this.counter));
-}
-
-function processClientStartedRest() {
-//    servicelog("Sending initial login view to client");
-    var items = [];
-    items.push([ [ createUiTextNode("username", getLanguageText(null, "TERM_USERNAME") + ":") ],
-		 [ createUiInputField("userNameInput", "", 15, false) ] ]);
-    items.push([ [ createUiTextNode("password", getLanguageText(null, "TERM_PASSWORD") + ":") ],
-		 [ createUiInputField("passwordInput", "", 15, true) ] ]);
-    var itemList = { title: getLanguageText(null, "PROMPT_LOGIN"),
-                     frameId: 0,
-		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
-		     rowNumbers: false,
-                     items: items };
-    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
-    var buttonList = [ { id: 501,
-			 text: getLanguageText(null, "BUTTON_LOGIN"),
-			 callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); postData('/api/login', {username : Sha1.hash(username)}); return false;" } ];
-    if(runCallbacByName("datastorageRead", "main").main.emailVerification) {
-	buttonList.push({ id: 502,
-			  text: getLanguageText(null, "BUTTON_NEWACCOUNT"),
-			  callbackFunction: "sessionPassword=''; postData('/api/passwordrecovery', {}); return false;" });
-    }
-    return { result: restStatusMessage("E_OK"),
-	     type: "T_LOGINUIREQUEST",
-	     data: { type: "createUiPage",
-		      content: { frameList: frameList,
-				 buttonList: buttonList }}};
-}
-
-function processClientStarted(cookie) {
-    if(cookie["user"] !== undefined) {
-	if(cookie.user["username"] !== undefined) {
-	    servicelog("User " + cookie.user.username + " logged out");
-	}
-    }
-    servicelog("Sending initial login view to client #" + cookie.count);
-    setState(cookie, "clientStarted");
-    cookie.aesKey = "";
-    cookie.user = {};
-    cookie.challenge = "";
-    cookie.incomingMessageBuffer = "";
-    var items = [];
-    items.push([ [ createUiTextNode("username", getLanguageText(null, "TERM_USERNAME") + ":") ],
-		 [ createUiInputField("userNameInput", "", 15, false) ] ]);
-    items.push([ [ createUiTextNode("password", getLanguageText(null, "TERM_PASSWORD") + ":") ],
-		 [ createUiInputField("passwordInput", "", 15, true) ] ]);
-    var itemList = { title: getLanguageText(null, "PROMPT_LOGIN"),
-                     frameId: 0,
-		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
-		     rowNumbers: false,
-                     items: items };
-    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
-    var buttonList = [ { id: 501,
-			 text: getLanguageText(null, "BUTTON_LOGIN"),
-			 callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); sendToServer('userLogin', { username: Sha1.hash(username) } ); return false;" } ];
-    if(runCallbacByName("datastorageRead", "main").main.emailVerification) {
-	buttonList.push({ id: 502,
-			  text: getLanguageText(null, "BUTTON_NEWACCOUNT"),
-			  callbackFunction: "sessionPassword=''; sendToServer('createOrModifyAccount', {}); return false;" });
-    }
-    var sendable = { type: "createUiPage",
-                     content: { frameList: frameList,
-				buttonList: buttonList } };
-    sendPlainTextToClient(cookie, sendable);
-    setStatustoClient(cookie, "Login");
-}
-
-function processUserLoginRest(data) {
+function processUserLogin(data) {
     if(typeof this.counter == 'undefined' ) {
 	this.counter = 0;
     }
     this.counter++;
     if(!data.username) {
 	servicelog("Illegal user login message");
-	return {result: restStatusMessage("E_USER")};
+	return processClientStarted("login");
     } else {
 	var user = getUserByHashedUserName(data.username);
-	if(user.length === 0) {
+	if(user === undefined) {
 	    servicelog("Unknown user login attempt");
-	    return {result: restStatusMessage("E_USER")};
+	    return processClientStarted("login");
 	} else {
-	    var aesKey = user[0].password;
-	    servicelog("User " + user[0].username + " logging in");
+	    var aesKey = user.password;
+	    servicelog("User " + user.username + " logging in");
 	    var sessionKey = getNewSessionKey();
-	    var token = sha1.hash(JSON.stringify(new Date().getTime()) + this.counter).slice(0, 12);
+	    var token = sha1.hash(JSON.stringify(new Date().getTime()) +
+				  this.counter).slice(0, 12);
 	    var serial = Math.floor(Math.random() * 1000000) + 10;
-	    var serialKey = Aes.Ctr.encrypt(JSON.stringify({ serial: serial, key: sessionKey }), aesKey, 128);
-	    if(createSessionRest(sessionKey, user[0].username, token, serial)) {
+	    var serialKey = Aes.Ctr.encrypt(JSON.stringify({ serial: serial,
+							     key: sessionKey }), aesKey, 128);
+	    if(createSession(sessionKey, user.username, token, serial)) {
 		return { result: restStatusMessage("E_OK"),
-			 type: "T_LOGINGRANTED",
+			 message: "Logging in",
+			 type: "T_LOGIN",
 			 token: token,
 			 serialKey: serialKey };
 	    } else {
@@ -447,171 +204,100 @@ function processUserLoginRest(data) {
     }
 }
 
-function processUserLogin(cookie, content) {
-    var sendable;
-    if(!content.username) {
-	servicelog("Illegal user login message");
-	processClientStarted(cookie);
-	return;
-    } else {
-	var user = getUserByHashedUserName(content.username);
-	if(user.length === 0) {
-	    servicelog("Unknown user login attempt");
-	    processClientStarted(cookie);
-	    return;
-	} else {
-	    cookie.user = user[0];
-	    cookie.aesKey = user[0].password;
-	    servicelog("User " + user[0].username + " logging in");
-	    var plainChallenge = getNewChallenge();
-	    servicelog("plainChallenge: " + plainChallenge);
-	    cookie.challenge = plainChallenge;
-	    sendable = { type: "loginChallenge",
-			 content: plainChallenge };
-	    sendCipherTextToClient(cookie, sendable);
-	}
-    }
-}
-
-function processGetUiWindowRest(url, data) {
-    var session = getSessionByToken(data.token);
+function processUserLogout(data) {
+    var session = refreshSessionByToken(data.token, data.data);
     if(!session) {
-	return {result: restStatusMessage("E_GETSESSION")};
-    }
-    var user = getUserByUsername(session.username);
-    if(!user) {
-	return {result: restStatusMessage("E_GETSESSION")};
-    }
-    var serialToken = JSON.parse(Aes.Ctr.decrypt(data.data, session.key, 128));
-    if((serialToken.token === session.token) &&
-       (parseInt(serialToken.serial) === (parseInt(session.serial) + 1))) {
-	servicelog("Verified incoming message");
-	session = refreshSessionByToken(session.token);
-	if(!session) {
-	    return {result: restStatusMessage("E_REFRESHSESSION")};
-	}
-	return(returnUiWindowRest(session, url.split("/")[3]));
-    } else {
 	servicelog("Incoming message verification failed");
-	return {result: restStatusMessage("E_VERIFY")};
+	return processClientStarted("login");
     }
+    deleteSessionByToken(data.token, data.data);
+    return processClientStarted("login");
 }
 
-function returnUiWindowRest(session, window) {
-    servicelog("STARTING: returnUiWindowRest, window: " + window)
-    if(window === "0") {
-	return(createMainWindowRest(session));
-    }
-    return {result: restStatusMessage("E_UNKNOWNWINDOW")};
-}
-
-function createMainWindowRest(session) {
-    servicelog("STARTING: createMainWindowRest")
+function createMainWindow(session) {
     if(getUserPriviliges(getUserByUsername(session.username)).length === 0) {
 	// for unpriviliged login, only send logout button and nothing more
 	data = { type: "unpriviligedLogin",
 		 content: { topButtonList: [{ id: 100,
 					      text: "Log Out",
-					      callbackMessage: "clientStarted" }]}};
+					      callbackFunction: "sessionKey=''; postData('/api/start', {}); return false;" }]}};
 	servicelog("Sending unpriviligedLogin info to client");
 	return { result: restStatusMessage("E_OK"),
+		 message: "Login OK",
 		 type: "T_UIWINDOWREQUEST",
 		 token: session.token,
 		 data: Aes.Ctr.encrypt(JSON.stringify(data), session.key, 128) };
     } else {
 	// Login succeeds, start the UI engine
-//	runCallbacByName("processResetToMainState", session);
-	return {result: restStatusMessage("E_UNKNOWNWINDOW")};
+	return runCallbackByName("processResetToMainState", session);
     }
 }
 
-function processLoginResponse(cookie, content) {
-    var sendable;
-    var plainResponse = Aes.Ctr.decrypt(content, cookie.aesKey, 128);
-    if(cookie.challenge === plainResponse) {
-	servicelog("User login OK");
-	setState(cookie, "loggedIn");
-	setStatustoClient(cookie, "Login OK");
-	if(getUserPriviliges(cookie.user).length === 0) {
-	    // for unpriviliged login, only send logout button and nothing more
-	    sendable = { type: "unpriviligedLogin",
-			 content: { topButtonList: [ { id: 100,
-						       text: "Log Out",
-						       callbackMessage: "clientStarted" } ] } };
-
-	    sendCipherTextToClient(cookie, sendable);
-	    servicelog("Sent unpriviligedLogin info to client #" + cookie.count);
-	} else {
-	    // Login succeeds, start the UI engine
-	    runCallbacByName("processResetToMainState", cookie);
-	}
-    } else {
-	servicelog("User login failed on client #" + cookie.count);
-	processClientStarted(cookie);
-    }
-}
-
-function processCreateOrModifyAccountRest(data) {
+function processClientStarted(message) {
+    servicelog("Sending initial login view to client");
     var items = [];
-    items.push([ [ createUiTextNode("email", getLanguageText(null, "TERM_EMAIL") + ":" ) ],
-		 [ createUiInputField("emailInput", "", 15, false) ],
-		 [ createUiFunctionButton(getLanguageText(null, "BUTTON_SENDEMAIL"), "var email=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'emailInput') { email = i.value; }; }); postData('/api/sendpasswordemail', {email:email}); return false;") ] ]);
-    items.push([ [ createUiTextNode("verification", getLanguageText(null, "TERM_VERIFICATIONCODE") + ":" ) ],
-		 [ createUiInputField("verificationInput", "", 15, false) ],
-		 [ createUiFunctionButton(getLanguageText(null, "BUTTON_VALIDATEACCOUNT"), "var code=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'verificationInput') { code = i.value; }; }); sessionPassword = code.slice(8,24); postData('/api/validateaccount', { email: code.slice(0,8), challenge: Aes.Ctr.encrypt('clientValidating', sessionPassword, 128) });") ] ]);
-    var itemList = { title: getLanguageText(null, "PROMPT_CHANGEACCOUNT"),
+    items.push([ [ ui.createUiTextNode("username", ui.getLanguageText(null, "TERM_USERNAME") + ":") ],
+		 [ ui.createUiInputField("userNameInput", "", 15, false) ] ]);
+    items.push([ [ ui.createUiTextNode("password", ui.getLanguageText(null, "TERM_PASSWORD") + ":") ],
+		 [ ui.createUiInputField("passwordInput", "", 15, true) ] ]);
+    var itemList = { title: ui.getLanguageText(null, "PROMPT_LOGIN"),
                      frameId: 0,
-		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
+		     header: [ [ [ ui.createUiHtmlCell("", "") ], [ ui.createUiHtmlCell("", "") ] ] ],
+		     rowNumbers: false,
+                     items: items };
+    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
+    var buttonList = [ { id: 501,
+			 text: ui.getLanguageText(null, "BUTTON_LOGIN"),
+			 callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionKey=Sha1.hash(password + Sha1.hash(username).slice(0,4)); postData('/api/login', {username : Sha1.hash(username)}); return false;" } ];
+    if(runCallbackByName("datastorageRead", "main").main.emailVerification) {
+	buttonList.push({ id: 502,
+			  text: ui.getLanguageText(null, "BUTTON_NEWACCOUNT"),
+			  callbackFunction: "sessionKey=''; postData('/api/passwordrecovery', {}); return false;" });
+    }
+    return { result: restStatusMessage("E_OK"),
+	     message: message,
+	     type: "T_LOGINUI",
+	     data: { type: "createUiPage",
+		      content: { frameList: frameList,
+				 buttonList: buttonList }}};
+}
+
+function processCreateOrModifyAccount(data) {
+    servicelog("Sending create/modify view to client");
+    var items = [];
+    items.push([ [ ui.createUiTextNode("email", ui.getLanguageText(null, "TERM_EMAIL") + ":" ) ],
+		 [ ui.createUiInputField("emailInput", "", 15, false) ],
+		 [ ui.createUiFunctionButton(ui.getLanguageText(null, "BUTTON_SENDEMAIL"), "var email=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'emailInput') { email = i.value; }; }); postData('/api/sendpasswordemail', {email:email}); return false;") ] ]);
+    items.push([ [ ui.createUiTextNode("verification", ui.getLanguageText(null, "TERM_VERIFICATIONCODE") + ":" ) ],
+		 [ ui.createUiInputField("verificationInput", "", 15, false) ],
+		 [ ui.createUiFunctionButton(ui.getLanguageText(null, "BUTTON_VALIDATEACCOUNT"), "var code=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'verificationInput') { code = i.value; }; }); sessionKey = code.slice(8,24); postData('/api/validateaccount', { email: code.slice(0,8), challenge: Aes.Ctr.encrypt('clientValidating', sessionKey, 128) });") ] ]);
+    var itemList = { title: ui.getLanguageText(null, "PROMPT_CHANGEACCOUNT"),
+                     frameId: 0,
+		     header: [ [ [ ui.createUiHtmlCell("", "") ], [ ui.createUiHtmlCell("", "") ], [ ui.createUiHtmlCell("", "") ] ] ],
 		     rowNumbers: false,
                      items: items };
     var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
     return { result: restStatusMessage("E_OK"),
-	     type: "T_VERIFYREQUEST",
+	     message: "create/modify",
+	     type: "T_VERIFYUI",
 	     data: { type: "createUiPage",
                      content: { frameList: frameList,
 				buttonList: [ { id: 501,
-						text: getLanguageText(null, "BUTTON_CANCEL"),
-						callbackFunction: "sessionPassword=''; postData('/api/start', {}); return false;" }]}}};
+						text: ui.getLanguageText(null, "BUTTON_CANCEL"),
+						callbackFunction: "sessionKey=''; postData('/api/start', {}); return false;" }]}}};
 }
 
-function processCreateOrModifyAccount(cookie) {
-    var items = [];
-    items.push([ [ createUiTextNode("email", getLanguageText(null, "TERM_EMAIL") + ":" ) ],
-		 [ createUiInputField("emailInput", "", 15, false) ],
-		 [ createUiFunctionButton(getLanguageText(null, "BUTTON_SENDEMAIL"), "var email=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'emailInput') { email = i.value; }; }); sendToServer('accountRequestMessage', {email:email}); return false;") ] ]);
-    items.push([ [ createUiTextNode("verification", getLanguageText(null, "TERM_VERIFICATIONCODE") + ":" ) ],
-		 [ createUiInputField("verificationInput", "", 15, false) ],
-		 [ createUiFunctionButton(getLanguageText(null, "BUTTON_VALIDATEACCOUNT"), "var code=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'verificationInput') { code = i.value; }; }); sessionPassword = code.slice(8,24); sendToServer('validateAccountMessage', { email: code.slice(0,8), challenge: Aes.Ctr.encrypt('clientValidating', sessionPassword, 128) });") ] ]);
-    var itemList = { title: getLanguageText(null, "PROMPT_CHANGEACCOUNT"),
-                     frameId: 0,
-		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
-		     rowNumbers: false,
-                     items: items };
-    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
-    var sendable = { type: "createUiPage",
-                     content: { frameList: frameList,
-				buttonList: [ { id: 501,
-						text: getLanguageText(null, "BUTTON_CANCEL"),
-						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" } ] } };
-    sendPlainTextToClient(cookie, sendable);
-    setStatustoClient(cookie, "Modify account");
-}
-
-function processAccountRequestMessageRest(data) {
+function processAccountRequestMessage(data) {
     servicelog("Request for email verification: [" + data.email + "]");
-    sendVerificationEmailRest(data.email);
+    if(data.email.length === 0) {
+	return processCreateOrModifyAccount(data);
+    }
+    sendVerificationEmail(data.email);
     // send login panel
-    return processClientStartedRest();
+    return processClientStarted("sent email");
 }
 
-function processAccountRequestMessage(cookie, content) {
-    servicelog("Request for email verification: [" + content.email + "]");
-    sendVerificationEmail(cookie, content.email);
-    processClientStarted(cookie);
-    setStatustoClient(cookie, "Email sent!");
-}
-
-function processValidateAccountMessageRest(data) {
+function processValidateAccountMessage(data) {
     if(!data.email || !data.challenge) {
 	servicelog("Illegal validate account message");
 	return restStatusMessage("E_VERIFY");
@@ -634,522 +320,150 @@ function processValidateAccountMessageRest(data) {
 	if(request.isNewAccount) {
 	    newAccount.realname = "";
 	    newAccount.phone = "";
-	    newAccount.language = runCallbacByName("datastorageRead", "main").main.defaultLanguage;
+	    newAccount.language = runCallbackByName("datastorageRead", "main").main.defaultLanguage;
 	} else {
 	    var user = getUserByEmail(request.email);
 	    newAccount.realname = user.realname;
 	    newAccount.phone = user.phone;
 	    newAccount.language = user.language;
 	}
-	return sendUserAccountModificationDialogRest(newAccount, request.token.key);
-    }
+	return sendUserAccountModificationDialog(newAccount, request.token.key, false);
+    }    
 }
 
-function processValidateAccountMessage(cookie, content) {
-    if(!content.email || !content.challenge) {
-	servicelog("Illegal validate account message");
-	processClientStarted(cookie);
-	return;
-    } else {
-	servicelog("Validation code: " + JSON.stringify(content));
-	var request = validatePendingRequest(content.email.toString());
-	if(request === false) {
-	    servicelog("Failed to validate pending request");
-	    processClientStarted(cookie);
-	    return;
-	}
-	if(Aes.Ctr.decrypt(content.challenge, request.token.key, 128) !== "clientValidating") {
-	    servicelog("Failed to validate code");
-	    processClientStarted(cookie);
-	    return;
-	}
-	cookie.aesKey = request.token.key;
- 	var newAccount = { checksum: request.checksum,
-			   isNewAccount: request.isNewAccount,
-			   showAccountDeletePanel: false,
-			   email: request.email,
-			   username: request.username };
-	if(request.isNewAccount) {
-	    newAccount.realname = "";
-	    newAccount.phone = "";
-	    newAccount.language = runCallbacByName("datastorageRead", "main").main.defaultLanguage;
-	    cookie.user.language = newAccount.language;
-	    setState(cookie, "newUserValidated");
-	} else {
-	    var user = getUserByEmail(request.email);
-	    newAccount.realname = user.realname;
-	    newAccount.phone = user.phone;
-	    newAccount.language = user.language;
-	    cookie.user.language = user.language;
-	    setState(cookie, "oldUserValidated");
-	}
-	sendUserAccountModificationDialog(cookie, newAccount);
-	return;
-    }
-}
-
-
-// Pending list handling
-
-function createSessionRest(key, username, token, serial) {
-    var sessionData = runCallbacByName("datastorageRead", "session");
-    var request = { key: key,
-		    token: token,
-		    date: new Date().getTime(),
-		    serial: serial,
-		    username: username }
-    sessionData.session.push(request);
-    if(runCallbacByName("datastorageWrite", "session", sessionData) === false) {
-	servicelog("Session database write failed");
-	return false;
-    } else {
-	servicelog("Created new session");
-	return true;
-    }
-}
-
-function refreshSessionByToken(token) {
-    servicelog("Updating session");
-    var newSessionData = [];
-    var session;
-    runCallbacByName("datastorageRead", "session").session.forEach(function(s) {
-	if(s.token === token) {
-	    s.date = new Date().getTime();
-	    s.serial = parseInt(s.serial) + 2;
-	    session = s;
-	}
-	newSessionData.push(s);
-    });
-    if(runCallbacByName("datastorageWrite", "session", {session: newSessionData}) === false) {
-	servicelog("Session database write failed");
-	return false;
-    } else {
-	servicelog("Updated session");
-	return session;
-    }
-}
-
-function createPendingRequest(recipientAddress) {
-    removePendingRequest(recipientAddress);
-    var pendingData = runCallbacByName("datastorageRead", "pending");
-    var timeout = new Date();
-    var emailToken = generateEmailToken(recipientAddress);
-    var username = getUserNameByEmail(recipientAddress);
-    var isNewAccount = false;
-    var sendEmailMessages = true;
-    if(username === "") { isNewAccount = true; }
-//    if(stateIs(cookie, "loggedIn")) { sendEmailMessages = false; }
-    timeout.setHours(timeout.getHours() + 24);
-    var request = { email: recipientAddress,
-		    isNewAccount: isNewAccount,
-		    sendEmailMessages: sendEmailMessages,
-		    username: username,
-                    token: emailToken,
-                    date: timeout.getTime(),
-		    state: "pending" };
-    var checksum = sha1.hash(JSON.stringify(request));
-    request.checksum = checksum;
-    pendingData.pending.push(request);
-    if(runCallbacByName("datastorageWrite", "pending", pendingData) === false) {
-	servicelog("Pending database write failed");
-	return { request: false,
-		 token: false };
-    } else {
-	servicelog("Created pending request");
-	return { request: request,
-		 token: emailToken };
-    }
-}
-
-function validatePendingRequest(emailHash) {
-    var pendingUserData = runCallbacByName("datastorageRead", "pending").pending;
-    if(Object.keys(pendingUserData).length === 0) {
-	servicelog("Empty pending requests database, bailing out");
-	return false;
-    }
-    var target = pendingUserData.filter(function(u) {
-	return u.token.mail === emailHash.slice(0, 8);
-    });
-    if(target.length === 0) {
-	servicelog("Cannot find a pending request");
-	return false;
-    }
-    if(target[0].state != "pending") {
-	servicelog("Cannot validate a pending request in wrong state");
-	return false;
-    }
-    target[0].state = "validated";
-    var newPendingUserData = pendingUserData.filter(function(u) {
-	return u.token.mail !== emailHash.slice(0, 8);
-    });
-    newPendingUserData.push(target[0]);
-    if(runCallbacByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
-	servicelog("Pending requests database write failed");
-    }
-    servicelog("Validated pending request");
-    return target[0];
-}
-
-function getValidatedPendingRequest(checksum) {
-    var pendingUserData = runCallbacByName("datastorageRead", "pending").pending;
-    if(Object.keys(pendingUserData).length === 0) {
-	servicelog("Empty pending requests database, bailing out");
-	return false;
-    } 
-    var target = pendingUserData.filter(function(u) {
-	return u.checksum === checksum;
-    });
-    if(target.length === 0) {
-	servicelog("Cannot find a pending request");
-	return false;
-    }
-    if(target[0].state !== "validated") {
-	servicelog("Cannot get a pending request in wrong state");
-	return false;
-    }
-    return target[0];
-}
-
-function commitPendingRequest(checksum) {
-    var pendingUserData = runCallbacByName("datastorageRead", "pending").pending;
-    if(Object.keys(pendingUserData).length === 0) {
-	servicelog("Empty pending requests database, bailing out");
-	return false;
-    } 
-    var target = pendingUserData.filter(function(u) {
-	return u.checksum === checksum;
-    });
-    if(target.length === 0) {
-	servicelog("Cannot find a pending request");
-	return false;
-    }
-    var newPendingUserData = [];
-    newPendingUserData = pendingUserData.filter(function(u) {
-	return u.checksum !== checksum;
-    });
-    if(runCallbacByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
-	servicelog("Pending requests database write failed");
-    }
-    return target[0];
-}
-
-function removePendingRequest(emailAdress) {
-    var pendingUserData = runCallbacByName("datastorageRead", "pending");
-    if(Object.keys(pendingUserData.pending).length === 0) {
-	servicelog("Empty pending requests database, bailing out");
-	return;
-    }
-    if(pendingUserData.pending.filter(function(u) {
-	return u.email === emailAdress;
-    }).length !== 0) {
-	servicelog("Removing existing entry from pending database");
-	var newPendingUserData = { pending: [] };
-	newPendingUserData.pending = pendingUserData.pending.filter(function(u) {
-            return u.email !== emailAdress;
-	});
-	if(runCallbacByName("datastorageWrite", "pending", newPendingUserData) === false) {
-            servicelog("Pending requests database write failed");
-	}
-    } else {
-	servicelog("no existing entries in pending database");
-    }
-}
-
-function sendUserAccountModificationDialogRest(account, key) {
+function sendUserAccountModificationDialog(account, key, loggedin) {
     var title = "";
     var configurationItems = [];
-    configurationItems.push([ [ createUiTextNode("email", getLanguageText(null, "TERM_EMAIL") + ":") ],
-			      [ createUiInputField("emailInput", account.email, 15, false) ] ]);
+    configurationItems.push([ [ ui.createUiTextNode("email", ui.getLanguageText(null, "TERM_EMAIL") + ":") ],
+			      [ ui.createUiInputField("emailInput", account.email, 15, false) ] ]);
     if(account.isNewAccount) {
-	title = getLanguageText(null, "PROMPT_CREATENEWACCOUNT");
-	configurationItems.push([ [ createUiTextNode("username", getLanguageText(null, "TERM_USERNAME") + ":") ],
-				  [ createUiInputField("usernameInput", account.username, 15, false) ] ]);
+	title = ui.getLanguageText(null, "PROMPT_CREATENEWACCOUNT");
+	configurationItems.push([ [ ui.createUiTextNode("username", ui.getLanguageText(null, "TERM_USERNAME") + ":") ],
+				  [ ui.createUiInputField("usernameInput", account.username, 15, false) ] ]);
     } else {
-	title = getLanguageText(null, "PROMPT_MODIFYOLDACCOUNT");
-	configurationItems.push([ [ createUiTextNode("username", getLanguageText(null, "TERM_USERNAME") + ":") ],
-				  [ createUiInputField("usernameInput", account.username, 15, false, true) ] ]);
+	title = ui.getLanguageText(null, "PROMPT_MODIFYOLDACCOUNT");
+	configurationItems.push([ [ ui.createUiTextNode("username", ui.getLanguageText(null, "TERM_USERNAME") + ":") ],
+				  [ ui.createUiInputField("usernameInput", account.username, 15, false, true) ] ]);
     }
-    configurationItems.push([ [ createUiTextNode("realname", getLanguageText(null, "TERM_REALNAME")) ],
-			      [ createUiInputField("realnameInput", account.realname, 15, false) ] ]);
-    configurationItems.push([ [ createUiTextNode("phone", getLanguageText(null, "TERM_PHONE")) ],
-			      [ createUiInputField("phoneInput", account.phone, 15, false) ] ]);
-    configurationItems.push([ [ createUiTextNode("language", getLanguageText(null, "TERM_LANGUAGE")) ],
-			      [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, account.language, true, false, false) ] ]);
-    configurationItems.push([ [ createUiTextNode("password1", getLanguageText(null, "TERM_PASSWORD")) ],
-			      [ createUiInputField("passwordInput1", "", 15, true) ] ]);
-    configurationItems.push([ [ createUiTextNode("password2", getLanguageText(null, "TERM_REPEATPASSWORD")) ],
-			      [ createUiInputField("passwordInput2", "", 15, true) ] ]);
+    configurationItems.push([ [ ui.createUiTextNode("realname", ui.getLanguageText(null, "TERM_REALNAME")) ],
+			      [ ui.createUiInputField("realnameInput", account.realname, 15, false) ] ]);
+    configurationItems.push([ [ ui.createUiTextNode("phone", ui.getLanguageText(null, "TERM_PHONE")) ],
+			      [ ui.createUiInputField("phoneInput", account.phone, 15, false) ] ]);
+    configurationItems.push([ [ ui.createUiTextNode("language", ui.getLanguageText(null, "TERM_LANGUAGE")) ],
+			      [ ui.createUiSelectionList("languageInput", runCallbackByName("datastorageRead" ,"language").languages, account.language, true, false, false) ] ]);
+    configurationItems.push([ [ ui.createUiTextNode("password1", ui.getLanguageText(null, "TERM_PASSWORD")) ],
+			      [ ui.createUiInputField("passwordInput1", "", 15, true) ] ]);
+    configurationItems.push([ [ ui.createUiTextNode("password2", ui.getLanguageText(null, "TERM_REPEATPASSWORD")) ],
+			      [ ui.createUiInputField("passwordInput2", "", 15, true) ] ]);
     var configurationItemList = { title: title,
 				  frameId: 0,
-				  header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
+				  header: [ [ [ ui.createUiHtmlCell("", "") ], [ ui.createUiHtmlCell("", "") ] ] ],
 				  rowNumbers: false,
 				  items: configurationItems };
     var frameList = [ { frameType: "fixedListFrame", frame: configurationItemList } ];
     if(account.showAccountDeletePanel) {
-	var deleteAccountItemList = { title: getLanguageText(null, "PROMPT_DELETEACCOUNT"),
+	var deleteAccountItemList = { title: ui.getLanguageText(null, "PROMPT_DELETEACCOUNT"),
 				      frameId: 1,
-				      header: [ [ [ createUiHtmlCell("", "") ] ] ],
+				      header: [ [ [ ui.createUiHtmlCell("", "") ] ] ],
 				      rowNumbers: false,
-				      items: [ [ [ createUiFunctionButton(getLanguageText(null, "BUTTON_DELETEACCOUNT"), "if(confirm('" + getLanguageText(null, 'PROMPT_CONFIRMDELETEACCOUNT') + "')) { sendToServerEncrypted('deleteAccountMessage', { }); }") ] ] ] };
+				      items: [ [ [ ui.createUiFunctionButton(ui.getLanguageText(null, "BUTTON_DELETEACCOUNT"), "if(confirm('" + ui.getLanguageText(null, 'PROMPT_CONFIRMDELETEACCOUNT') + "')) { sendToServerEncrypted('deleteAccountMessage', { }); }") ] ] ] };
 	frameList.push({ frameType: "fixedListFrame", frame: deleteAccountItemList });
     }
+    if(loggedin) {
+	var callbackFunction = "var userData=[{ key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); postEncrypted('/api/useraccountchange/loggedin', { checksum: '" + account.checksum + "', data: userData }); return false;"
+    } else {
+	var callbackFunction = "var userData=[{ key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); postData('/api/useraccountchange', { checksum: '" + account.checksum + "', data: Aes.Ctr.encrypt(JSON.stringify(userData), sessionKey, 128) }); return false;"
+    }
+    
     var data = { type: "createUiPage",
                  content: { frameList: frameList,
 			    buttonList: [ { id: 501,
-					    text: getLanguageText(null, "BUTTON_CANCEL"),
-					    callbackFunction: "sessionPassword=''; postData('/api/start', {}); return false;" },
+					    text: ui.getLanguageText(null, "BUTTON_CANCEL"),
+					    callbackFunction: "sessionKey=''; postData('/api/start', {}); return false;" },
 					  { id: 502,
-					    text: getLanguageText(null, "BUTTON_OK"),
-					    callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); postData('/api/useraccountchange', Aes.Ctr.encrypt(JSON.stringify({ userData: userData }), sessionPassword, 128)); return false;" }]}};
-	
+					    text: ui.getLanguageText(null, "BUTTON_OK"),
+					    callbackFunction: callbackFunction }]}};
     return { result: restStatusMessage("E_OK"),
-	     type: "T_USERMODIFICATIONUIREQUEST",
+	     message: "Change Account",
+	     type: "T_USERMODIFICATIONUI",
 	     data: Aes.Ctr.encrypt(JSON.stringify(data), key, 128) };
 }
 
-function sendUserAccountModificationDialog(cookie, account) {
-    var title = "";
-    var configurationItems = [];
-    configurationItems.push([ [ createUiTextNode("email", getLanguageText(cookie, "TERM_EMAIL") + ":") ],
-			      [ createUiInputField("emailInput", account.email, 15, false) ] ]);
-    if(account.isNewAccount) {
-	title = getLanguageText(cookie, "PROMPT_CREATENEWACCOUNT");
-	configurationItems.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
-				  [ createUiInputField("usernameInput", account.username, 15, false) ] ]);
-    } else {
-	title = getLanguageText(cookie, "PROMPT_MODIFYOLDACCOUNT");
-	configurationItems.push([ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME") + ":") ],
-				  [ createUiInputField("usernameInput", account.username, 15, false, true) ] ]);
-    }
-    configurationItems.push([ [ createUiTextNode("realname", getLanguageText(cookie, "TERM_REALNAME")) ],
-			      [ createUiInputField("realnameInput", account.realname, 15, false) ] ]);
-    configurationItems.push([ [ createUiTextNode("phone", getLanguageText(cookie, "TERM_PHONE")) ],
-			      [ createUiInputField("phoneInput", account.phone, 15, false) ] ]);
-    configurationItems.push([ [ createUiTextNode("language", getLanguageText(cookie, "TERM_LANGUAGE")) ],
-			      [ createUiSelectionList("languageInput", runCallbacByName("datastorageRead" ,"language").languages, account.language, true, false, false) ] ]);
-    configurationItems.push([ [ createUiTextNode("password1", getLanguageText(cookie, "TERM_PASSWORD")) ],
-			      [ createUiInputField("passwordInput1", "", 15, true) ] ]);
-    configurationItems.push([ [ createUiTextNode("password2", getLanguageText(cookie, "TERM_REPEATPASSWORD")) ],
-			      [ createUiInputField("passwordInput2", "", 15, true) ] ]);
-    var configurationItemList = { title: title,
-				  frameId: 0,
-				  header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
-				  rowNumbers: false,
-				  items: configurationItems };
-    var frameList = [ { frameType: "fixedListFrame", frame: configurationItemList } ];
-    if(account.showAccountDeletePanel) {
-	var deleteAccountItemList = { title: getLanguageText(cookie, "PROMPT_DELETEACCOUNT"),
-				      frameId: 1,
-				      header: [ [ [ createUiHtmlCell("", "") ] ] ],
-				      rowNumbers: false,
-				      items: [ [ [ createUiFunctionButton(getLanguageText(cookie, "BUTTON_DELETEACCOUNT"), "if(confirm('" + getLanguageText(cookie, 'PROMPT_CONFIRMDELETEACCOUNT') + "')) { sendToServerEncrypted('deleteAccountMessage', { }); }") ] ] ] };
-	frameList.push({ frameType: "fixedListFrame", frame: deleteAccountItemList });
-    }
-    var sendable = { type: "createUiPage",
-                     content: { frameList: frameList,
-				buttonList: [ { id: 501,
-						text: getLanguageText(cookie, "BUTTON_CANCEL"),
-						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" },
-					      { id: 502,
-						text: getLanguageText(cookie, "BUTTON_OK"),
-						callbackFunction: "var userData=[{ key:'checksum', value:'" + account.checksum + "' }, { key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); sendToServerEncrypted('userAccountChangeMessage', { userData: userData } ); return false;" } ] } };
-    sendCipherTextToClient(cookie, sendable);
-    setStatustoClient(cookie, "Modify account");
+function createLoggedinUserAccountChange(session) {
+    // user account modification fakes an email verification sequence
+    var user = getUserByUsername(session.username);
+    var request = createPendingRequest(user.email, true);
+    request = validatePendingRequest(request.token.mail);
+    request = getValidatedPendingRequest(request.checksum);
+    var account = { checksum: request.checksum,
+		    isNewAccount: false,
+		    username: user.username,
+		    email: user.email,
+		    realname: user.realname,
+		    phone: user.phone,
+		    language: user.language };
+    return account;
 }
 
-function processDeleteAccountMessage(cookie, content) {
-    servicelog("User " + cookie.user.username + " on client #" + cookie.count + " requests account deletion");
-    removePendingRequest(cookie.user.email);
-    var newUsers = [];
-    runCallbacByName("datastorageRead", "users").users.forEach(function(u) {
-	if(u.username !== cookie.user.username) { newUsers.push(u); }
-    });
-    if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
-	servicelog("User database write failed");
-    } else {
-	servicelog("Deleted user " + cookie.user.username + " from the database.");
-    }
-    processClientStarted(cookie);
-}
-
-function processUserAccountChangeMessageRest(data) {
-    if(data.userData === undefined) {
+function processUserAccountChangeMessage(data, loggedin) {
+    if(!data) {
 	servicelog("User account change contains no data.");
 	return {result: restStatusMessage("E_FORMAT")};
     }
-    var request = getValidatedPendingRequest(findObjectByKey(data.userData, "key", "checksum").value);
-    if(!request) {
-	servicelog("Cannot get a validated pending request");
-	return {result: restStatusMessage("E_VERIFY")};
+    var accountData;
+    var checkSum;
+
+    if(loggedin) {
+	var session = getSessionByToken(data.token);
+	if(!session) {
+	    servicelog("Cannot determine session in User account change.");
+	    return {result: restStatusMessage("E_FORMAT")};
+	}
+	accountData = JSON.parse(Aes.Ctr.decrypt(data.data, session.key, 128));
+	var request = getValidatedPendingRequest(accountData.data.checksum);
+	if(!request) {
+	    servicelog("Cannot get a validated pending request");
+	    return {result: restStatusMessage("E_VERIFY")};
+	}
+	checkSum = accountData.data.checksum;
+	accountData = accountData.data.data;	
+    } else {  
+	var request = getValidatedPendingRequest(data.checksum);
+	if(!request) {
+	    servicelog("Cannot get a validated pending request");
+	    return {result: restStatusMessage("E_VERIFY")};
+	}
+	accountData = JSON.parse(Aes.Ctr.decrypt(data.data, request.token.key, 128));
+	checkSum = data.checksum;
     }
-    var account = { checksum: findObjectByKey(data.userData, "key", "checksum").value,
+    var account = { checksum: checkSum,
 		    isNewAccount: request.isNewAccount,
-		    email: findObjectByKey(data.userData, "key", "emailInput").value,
-		    realname: findObjectByKey(data.userData, "key", "realnameInput").value,
-		    phone: findObjectByKey(data.userData, "key", "phoneInput").value,
-		    language: findObjectByKey(data.userData, "key", "languageInput").selected };
-    if(request.isNewAccount && getUserByUsername(findObjectByKey(data.userData, "key", "usernameInput").value) !== false) {
+		    email: findObjectByKey(accountData, "key", "emailInput").value,
+		    realname: findObjectByKey(accountData, "key", "realnameInput").value,
+		    phone: findObjectByKey(accountData, "key", "phoneInput").value,
+		    language: findObjectByKey(accountData, "key", "languageInput").selected };
+    if(findObjectByKey(accountData, "key", "usernameInput").value.length === 0) {
+	account.username = "";
+	servicelog("User attempted to create empty username");
+	return sendUserAccountModificationDialog(account, request.token.key, loggedin);
+    }
+    if(request.isNewAccount && (getUserByUsername(findObjectByKey(accountData, "key", "usernameInput").value) !== false)) {
 	account.username = "";
 	servicelog("User attempted to create an existing username");
-	return sendUserAccountModificationDialogRest(account);
+	return sendUserAccountModificationDialog(account, request.token.key, loggedin);
     } else {
-	account.username = findObjectByKey(data.userData, "key", "usernameInput").value;
+	account.username = findObjectByKey(accountData, "key", "usernameInput").value;
     }
-    if(findObjectByKey(data.userData, "key", "passwordInput1").value !==
-       findObjectByKey(data.userData, "key", "passwordInput2").value) {
+    if(findObjectByKey(accountData, "key", "passwordInput1").value !==
+       findObjectByKey(accountData, "key", "passwordInput2").value) {
 	servicelog("Password mismatch in account change dialog");
-	return sendUserAccountModificationDialogRest(account);
+	return sendUserAccountModificationDialog(account, request.token.key, loggedin);
     }
-    account.password = findObjectByKey(data.userData, "key", "passwordInput1").value;
+    account.password = findObjectByKey(accountData, "key", "passwordInput1").value;
     changeUserAccount(account);
-    if(request.sendEmailMessages) {
-	sendConfirmationEmails(account);
-	return {result: restStatusMessage("E_OK")};
-    } else {
-	servicelog("User account changed.");
-	return {result: restStatusMessage("E_OK")};
-    }
+    sendConfirmationEmails(account);
+    return processClientStarted("Account Saved");
 }
-
-function processUserAccountChangeMessage(cookie, content) {
-    if(content.userData === undefined) {
-	servicelog("User account change contains no data.");
-	processClientStarted(cookie);
-	return;
-    }
-    var request = getValidatedPendingRequest(findObjectByKey(content.userData, "key", "checksum").value);
-    if(request === false) {
-	servicelog("Cannot get a validated pending request");
-	processClientStarted(cookie);
-	return;
-    }
-    var account = { checksum: findObjectByKey(content.userData, "key", "checksum").value,
-		    isNewAccount: request.isNewAccount,
-		    email: findObjectByKey(content.userData, "key", "emailInput").value,
-		    realname: findObjectByKey(content.userData, "key", "realnameInput").value,
-		    phone: findObjectByKey(content.userData, "key", "phoneInput").value,
-		    language: findObjectByKey(content.userData, "key", "languageInput").selected };
-    if(request.isNewAccount && getUserByUsername(findObjectByKey(content.userData, "key", "usernameInput").value) !== false) {
-	account.username = "";
-	sendUserAccountModificationDialog(cookie, account);
-	setStatustoClient(cookie, "Username exists!");
-	servicelog("User attempted to create an existing username");
-	return;
-    } else {
-	account.username = findObjectByKey(content.userData, "key", "usernameInput").value;
-    }
-    if(findObjectByKey(content.userData, "key", "passwordInput1").value !==
-       findObjectByKey(content.userData, "key", "passwordInput2").value) {
-	sendUserAccountModificationDialog(cookie, account);
-	setStatustoClient(cookie, "Password mismatch!");
-	servicelog("Password mismatch in account change dialog");
-	return;
-    }
-    account.password = findObjectByKey(content.userData, "key", "passwordInput1").value;
-    changeUserAccount(account);
-    setStatustoClient(cookie, "User account changed!");
-    if(request.sendEmailMessages) {
-	sendConfirmationEmails(account);
-	processClientStarted(cookie);
-    } else {
-	servicelog("User account changed.");
-	runCallbacByName("processResetToMainState", cookie);
-    }
-}
-
-
-// UI helper functions
-
-function createUiTextNode(key, text) {
-    return { itemType: "textnode", key: key, text: text };
-}
-
-function createUiTextArea(key, value, cols, rows) {
-    if(cols === undefined) { cols = 10; }
-    if(rows === undefined) { rows = 1; }
-    return { itemType: "textarea", key: key, value: value, cols: cols, rows: rows };
-}
-
-function createUiCheckBox(key, checked, title, active, onClickFunction) {
-    if(title === undefined) { title = ""; }
-    if(active === undefined) { active = true; }
-    if(onClickFunction === undefined) { onClickFunction = "return;" }
-    return { itemType: "checkbox", key: key, checked: checked, title: title, active: active,
-	     onClickFunction: onClickFunction };
-}
-
-function createUiSelectionList(key, list, selected, active, hidden, zeroOption, onSelectFunction) {
-    var listItems = list.map(function(i) {
-	return { text: i, item: i }
-    }).filter(function(f) { return f; });
-    if(active === undefined) { active = true; }
-    if(hidden === undefined) { hidden = false; }
-    if(zeroOption === undefined) { zeroOption = true; }
-    if(onSelectFunction === undefined) { onSelectFunction = "return;" }
-    return { itemType: "selection", key: key, list: listItems, selected: selected, active: active,
-	     hidden: hidden, zeroOption: zeroOption, onSelectFunction: onSelectFunction };
-}
-
-function createUiMessageButton(text, callbackMessage, data, active) {
-    if(active === undefined) { active = true; }
-    return { itemType: "button", text: text, callbackMessage: callbackMessage, data: data,
-	     active: active };
-}
-
-function createUiFunctionButton(text, callbackFunction, active) {
-    if(active === undefined) { active = true; }
-    return { itemType: "button", text: text, callbackFunction: callbackFunction, active: active };
-}
-
-function createUiInputField(key, value, length, password, disabled) {
-    if(length === undefined) { length = 15; }
-    if(password === undefined) { password = false; }
-    if(disabled === undefined) { disabled = false; }
-    return { itemType: "input", key: key, value: value, length: length, password: password,
-	     disabled: disabled };
-}
-
-function createUiHtmlCell(key, value, backgroundColor, hidden, onClickFunction) {
-    if(backgroundColor === undefined) { backgroundColor = "#ffffff"; }
-    if(hidden  === undefined) { hidden = false; }
-    if(onClickFunction === undefined) { onClickFunction = "return;" }
-    return { itemType: "htmlcell", key: key, value: value, backgroundColor: backgroundColor, hidden: hidden,
-	     onClickFunction: onClickFunction };
-}
-
-function createTopButtons(cookie, additionalButtonList, adminRequest) {
-    if(adminRequest === undefined) { adminRequest = false; }
-    if(additionalButtonList === undefined) { additionalButtonList = []; }
-    var id = 101;
-    var topButtonList = [ { id: id++, text: "Log Out", callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" } ];
-    runCallbacByName("createTopButtonList", cookie).forEach(function(b) {
-	var flag = false; 
-	b.priviliges.forEach(function(p) {
-	    if(userHasPrivilige(p, cookie.user)) { flag = true; }
-	});
-	if(flag) {
-	    b.button.id = id++;
-	    topButtonList.push(b.button);
-	}
-    });
-    // additional buttons need not have defined priviliges
-    additionalButtonList.forEach(function(b) {
-	b.button.id = id++;
-	topButtonList.push(b.button);
-    });
-    if(userHasPrivilige("system-admin", cookie.user)) {
-	if(adminRequest) {
-	    topButtonList.push( { id: id++, text: "User Mode", callbackMessage: "resetToMain" } );
-	} else {
-	    topButtonList.push( { id: id++, text: "Admin Mode", callbackMessage: "gainAdminMode" } );
-	}
-    } else {
-	topButtonList.push( { id: id++, text: "User Settings", callbackMessage: "getUserSettings" } );
-    }
-    return topButtonList;
-}
-
-// generic helper functions
 
 function findObjectByKey(array, key, value) {
     for (var i = 0; i < array.length; i++) {
@@ -1160,13 +474,139 @@ function findObjectByKey(array, key, value) {
     return null;
 }
 
+function createPriviligeList() {
+    var priviligeList = runCallbackByName("createAdminPanelUserPriviliges");
+    priviligeList.push({ privilige: "system-admin", code: "a"});
+    return priviligeList;
+}
+
+function sendAdminDialog(session) {
+    servicelog("User " + session.username + " requests Sytem Administration priviliges");
+    if(userHasPrivilige("system-admin", getUserByUsername(session.username))) {
+	servicelog("Granting Sytem Administration priviliges to user " + session.username);
+	var topButtonList =  ui.createTopButtons(session, [], true);
+	var items = [];
+	var priviligeList = createPriviligeList();
+	runCallbackByName("datastorageRead", "users").users.forEach(function(u) {
+	    var userPriviliges = [];
+	    priviligeList.forEach(function(p) {
+		userPriviliges.push(ui.createUiCheckBox(p.privilige, userHasPrivilige(p.privilige, u), p.code));
+	    });
+	    items.push([ [ ui.createUiTextNode("username", u.username) ],
+			 [ ui.createUiInputField("realname", u.realname, 15) ],
+			 [ ui.createUiInputField("email", u.email, 20) ],
+			 [ ui.createUiInputField("phone", u.phone, 10) ],
+			 [ ui.createUiSelectionList("language", runCallbackByName("datastorageRead" ,"language").
+						    languages, u.language, true, false, false) ],
+			 userPriviliges,
+		         [ ui.createUiMessageButton("Change", "changeUserPassword", u.username),
+			   ui.createUiInputField("password", "", 10, true) ] ] )
+	});
+	var emptyPriviligeList = [];
+	priviligeList.forEach(function(p) {
+	    emptyPriviligeList.push(ui.createUiCheckBox(p.privilige, false, p.code));
+	});
+        var priviligeCodes = "";
+        createPriviligeList().forEach(function(p) {
+            priviligeCodes = priviligeCodes + p.code + " / ";
+        });
+        priviligeCodes = priviligeCodes.slice(0, priviligeCodes.length-3);
+	var userListPanel = { title: ui.getLanguageText(session, "PROMPT_USERADMIN"),
+			      frameId: 0,
+			      header: [ [ [ ui.createUiHtmlCell("", "") ],
+					  [ ui.createUiHtmlCell("", ui.getLanguageText(session, "TERM_USERNAME")) ],
+					  [ ui.createUiHtmlCell("", ui.getLanguageText(session, "TERM_REALNAME")) ],
+					  [ ui.createUiHtmlCell("", ui.getLanguageText(session, "TERM_EMAIL")) ],
+					  [ ui.createUiHtmlCell("", ui.getLanguageText(session, "TERM_PHONE")) ],
+					  [ ui.createUiHtmlCell("", ui.getLanguageText(session, "TERM_LANGUAGE")) ],
+					  [ ui.createUiHtmlCell("", priviligeCodes) ],
+					  [ ui.createUiHtmlCell("", ui.getLanguageText(session, "BUTTON_CHANGEPASSWORD")) ] ] ],
+			      items: items,
+			      newItem: [ [ ui.createUiInputField("username", "<username>", 10) ],
+					 [ ui.createUiInputField("realname", "<realname>", 15) ],
+					 [ ui.createUiInputField("email", "<email>", 20) ],
+					 [ ui.createUiInputField("phone", "<phone>", 10) ],
+					 [ ui.createUiSelectionList("language", runCallbackByName("datastorageRead" ,"language").
+								    languages, runCallbackByName("datastorageRead", "main").
+								    main.defaultLanguage, true, false, false) ],
+					 emptyPriviligeList,
+					 [ ui.createUiTextNode("password", "") ] ] };
+	var email = runCallbackByName("datastorageRead", "email");
+	var emailEnabled = runCallbackByName("datastorageRead", "main").main.emailVerification;
+	var emailConfigPanel = { title: ui.getLanguageText(session, "PROMPT_EMAILADMIN"),
+				 frameId: 1,
+				 header: [ [ [ ui.createUiHtmlCell("", "") ], [ ui.createUiHtmlCell("", "") ] ] ],
+				 items: [ [ [ ui.createUiTextNode("email_enabled", ui.getLanguageText(session, "TERM_ENABLED")) ],
+					    [ ui.createUiCheckBox("email_enabled", emailEnabled, "enabled")] ],
+					  [ [ ui.createUiTextNode("mailserver", ui.getLanguageText(session, "TERM_MAILSERVER")) ],
+					    [ ui.createUiInputField("mailserver", email.host, 15) ] ],
+					  [ [ ui.createUiTextNode("username", ui.getLanguageText(session, "TERM_USERNAME")) ],
+					    [ ui.createUiInputField("username", email.user, 15) ] ],
+					  [ [ ui.createUiTextNode("sender", ui.getLanguageText(session, "TERM_SENDERADDRESS")) ],
+					    [ ui.createUiInputField("sender", email.sender, 15) ] ],
+					  [ [ ui.createUiTextNode("password", ui.getLanguageText(session, "TERM_PASSWORD")) ],
+					    [ ui.createUiInputField("password", email.password, 15, true) ] ],
+					  [ [ ui.createUiTextNode("use_ssl", ui.getLanguageText(session, "TERM_USESSL")) ],
+					    [ ui.createUiCheckBox("use_ssl", email.ssl, "use ssl") ] ],
+					  [ [ ui.createUiTextNode("blindly_trust", ui.getLanguageText(session, "TERM_BLINDLYTRUST")) ],
+					    [ ui.createUiCheckBox("blindly_trust", email.blindlyTrust, "blindly trust") ] ] ] };
+					
+	var frameList = [ { frameType: "editListFrame", frame: userListPanel },
+			  { frameType: "fixedListFrame", frame: emailConfigPanel } ];
+	var data = { type: "createUiPage",
+		     content: { topButtonList: topButtonList,
+				frameList: frameList,
+				buttonList: [ { id: 501,
+						text: ui.getLanguageText(null, "BUTTON_OK"),
+						callbackMessage: "saveAdminData" },
+					      { id: 502,
+						text: ui.getLanguageText(null, "BUTTON_CANCEL"),
+						callbackFunction: "postEncrypted('/api/window/0', {}); return false;" } ] } };
+	return { result: restStatusMessage("E_OK"),
+		 message: "Admin Panel",
+		 type: "T_UIWINDOWREQUEST",
+		 data: Aes.Ctr.encrypt(JSON.stringify(data), session.key, 128) };
+    } else {
+	servicelog("User " + session.username + " does not have Sytem Administration priviliges!");
+	return { result: restStatusMessage("E_UNIMPLEMENTED") }
+    }	
+}
+
+function processAdminPanelRequest(data) {
+    var session = refreshSessionByToken(data.token, data.data);
+    if(!session) {
+	servicelog("Incoming message verification failed");
+	return {result: restStatusMessage("E_VERIFYSESSION")};
+    }
+    var user = getUserByUsername(session.username);
+    if(!user) {
+	return {result: restStatusMessage("E_USER")};
+    }
+    if(!userHasPrivilige("system-admin", user)) {
+	return {result: restStatusMessage("E_PRIVILIGE")};
+    }
+    return sendAdminDialog(session)
+}
+
+function processUserAccountRequest(data) {
+    var session = refreshSessionByToken(data.token, data.data);
+    if(!session) {
+	servicelog("Incoming message verification failed");
+	return {result: restStatusMessage("E_VERIFYSESSION")};
+    }
+    var account = createLoggedinUserAccountChange(session);
+    return sendUserAccountModificationDialog(account, session.key, true);
+}
+
+// User handling functions
+
 function changeUserAccount(account) {
     var request = commitPendingRequest(account.checksum);
     if(!request.isNewAccount) {
 	account.username = request.username;
     }
     var newUsers = [];
-    var oldUsers = runCallbacByName("datastorageRead", "users").users;
+    var oldUsers = runCallbackByName("datastorageRead", "users").users;
     var flag = true;
     oldUsers.forEach(function(u) {
 	if(u.username === account.username) {
@@ -1197,328 +637,27 @@ function changeUserAccount(account) {
 			realname: account.realname,
 			phone: account.phone,
 			language: account.language,
-			applicationData: { priviliges: runCallbacByName("createDefaultPriviliges") } });
+			applicationData: { priviliges: runCallbackByName("createDefaultPriviliges") } });
     }
-    if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
+    if(runCallbackByName("datastorageWrite", "users", { users: newUsers }) === false) {
 	servicelog("User database write failed");
     } else {
 	servicelog("Updated User database.");
     }
 }
 
-
-// Adminstration UI panel
-
-function createPriviligeList() {
-    var priviligeList = runCallbacByName("createAdminPanelUserPriviliges");
-    priviligeList.push({ privilige: "system-admin", code: "a"});
-    return priviligeList;
+function getPasswordHash(username, password) {
+    return sha1.hash(password + sha1.hash(username).slice(0,4));
 }
 
-function processGainAdminMode(cookie, content) {
-    servicelog("Client #" + cookie.count + " requests Sytem Administration priviliges");
-    if(userHasPrivilige("system-admin", cookie.user)) {
-	servicelog("Granting Sytem Administration priviliges to user " + cookie.user.username);
-	var topButtonList =  createTopButtons(cookie, [], true);
-	var items = [];
-	var priviligeList = createPriviligeList();
-	runCallbacByName("datastorageRead", "users").users.forEach(function(u) {
-	    var userPriviliges = [];
-	    priviligeList.forEach(function(p) {
-		userPriviliges.push(createUiCheckBox(p.privilige, userHasPrivilige(p.privilige, u), p.code));
-	    });
-	    items.push([ [ createUiTextNode("username", u.username) ],
-			 [ createUiInputField("realname", u.realname, 15) ],
-			 [ createUiInputField("email", u.email, 20) ],
-			 [ createUiInputField("phone", u.phone, 10) ],
-			 [ createUiSelectionList("language", runCallbacByName("datastorageRead" ,"language").languages, u.language, true, false, false) ],
-			 userPriviliges,
-		         [ createUiMessageButton("Change", "changeUserPassword", u.username),
-			   createUiInputField("password", "", 10, true) ] ] )
-	});
-	var emptyPriviligeList = [];
-	priviligeList.forEach(function(p) {
-	    emptyPriviligeList.push(createUiCheckBox(p.privilige, false, p.code));
-	});
-        var priviligeCodes = "";
-        createPriviligeList().forEach(function(p) {
-            priviligeCodes = priviligeCodes + p.code + " / ";
-        });
-        priviligeCodes = priviligeCodes.slice(0, priviligeCodes.length-3);
-	var userListPanel = { title: getLanguageText(cookie, "PROMPT_USERADMIN"),
-			      frameId: 0,
-			      header: [ [ [ createUiHtmlCell("", "") ],
-					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_USERNAME")) ],
-					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_REALNAME")) ],
-					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_EMAIL")) ],
-					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_PHONE")) ],
-					  [ createUiHtmlCell("", getLanguageText(cookie, "TERM_LANGUAGE")) ],
-					  [ createUiHtmlCell("", priviligeCodes) ],
-					  [ createUiHtmlCell("", getLanguageText(cookie, "BUTTON_CHANGEPASSWORD")) ] ] ],
-			      items: items,
-			      newItem: [ [ createUiInputField("username", "<username>", 10) ],
-					 [ createUiInputField("realname", "<realname>", 15) ],
-					 [ createUiInputField("email", "<email>", 20) ],
-					 [ createUiInputField("phone", "<phone>", 10) ],
-					 [ createUiSelectionList("language", runCallbacByName("datastorageRead" ,"language").languages,
-								 runCallbacByName("datastorageRead", "main").main.defaultLanguage, true, false, false) ],
-					 emptyPriviligeList,
-					 [ createUiTextNode("password", "") ] ] };
-	var email = runCallbacByName("datastorageRead", "email");
-	var emailEnabled = runCallbacByName("datastorageRead", "main").main.emailVerification;
-	var emailConfigPanel = { title: getLanguageText(cookie, "PROMPT_EMAILADMIN"),
-				 frameId: 1,
-				 header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
-				 items: [ [ [ createUiTextNode("email_enabled", getLanguageText(cookie, "TERM_ENABLED")) ],
-					    [ createUiCheckBox("email_enabled", emailEnabled, "enabled")] ],
-					  [ [ createUiTextNode("mailserver", getLanguageText(cookie, "TERM_MAILSERVER")) ],
-					    [ createUiInputField("mailserver", email.host, 15) ] ],
-					  [ [ createUiTextNode("username", getLanguageText(cookie, "TERM_USERNAME")) ],
-					    [ createUiInputField("username", email.user, 15) ] ],
-					  [ [ createUiTextNode("sender", getLanguageText(cookie, "TERM_SENDERADDRESS")) ],
-					    [ createUiInputField("sender", email.sender, 15) ] ],
-					  [ [ createUiTextNode("password", getLanguageText(cookie, "TERM_PASSWORD")) ],
-					    [ createUiInputField("password", email.password, 15, true) ] ],
-					  [ [ createUiTextNode("use_ssl", getLanguageText(cookie, "TERM_USESSL")) ],
-					    [ createUiCheckBox("use_ssl", email.ssl, "use ssl") ] ],
-					  [ [ createUiTextNode("blindly_trust", getLanguageText(cookie, "TERM_BLINDLYTRUST")) ],
-					    [ createUiCheckBox("blindly_trust", email.blindlyTrust, "blindly trust") ] ] ] };
-					
-	var frameList = [ { frameType: "editListFrame", frame: userListPanel },
-			  { frameType: "fixedListFrame", frame: emailConfigPanel } ];
-	var sendable = { type: "createUiPage",
-			 content: { topButtonList: topButtonList,
-				    frameList: frameList,
-				    buttonList: [ { id: 501, text: "OK", callbackMessage: "saveAdminData" },
-						  { id: 502, text: "Cancel",  callbackMessage: "resetToMain" } ] } };
-	sendCipherTextToClient(cookie, sendable);
-	servicelog("Sent NEW adminData to client #" + cookie.count);
-    } else {
-	servicelog("User " + cookie.user.username + " does not have Sytem Administration priviliges!");
-	processClientStarted(cookie);
-    }	
-}
-
-function processSaveAdminData(cookie, data) {
-    servicelog("Client #" + cookie.count + " requests admin data saving.");
-    if(userHasPrivilige("system-admin", cookie.user)) {
-	updateAdminDataFromClient(cookie, data);
-    } else {
-	servicelog("User " + cookie.user.username + " does not have priviliges to edit admin data");
-    }
-    runCallbacByName("processResetToMainState", cookie);
-}
-
-function updateAdminDataFromClient(cookie, userData) {
-    var userList = extractUserListFromInputData(userData);
-    var emailSettings = extractEmailSettingsFromInputData(userData);
-    if(userList === null) {
-	runCallbacByName("processResetToMainState", cookie);
-	return;
-    }
-    var newUsers = [];
-    var oldUsers = runCallbacByName("datastorageRead", "users").users;
-    userList.forEach(function(n) {
-	var flag = true;
-	oldUsers.forEach(function(u) {
-	    if(n.username === u.username) {
-		flag = false;
-		n.password = u.password;
-		newUsers.push(n);
-	    }
-	});
-	if(flag) {
-	    n.password = "";
-	    newUsers.push(n);
-	}
-    });
-    if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
-	servicelog("User database write failed");
-    }
-    var main = runCallbacByName("datastorageRead", "main").main;
-    main.emailVerification = emailSettings.enabled;
-    if(runCallbacByName("datastorageWrite", "main", { main: main }) === false) {
-	servicelog("Main database write failed");
-    }
-    var emailPassword = runCallbacByName("datastorageRead", "email").password;
-    var newEmailSettings = { host: emailSettings.host,
-			     user: emailSettings.user,
-			     sender: emailSettings.sender,
-			     password: emailSettings.password,
-			     ssl: emailSettings.ssl,
-			     blindlyTrust: emailSettings.blindlyTrust };
-    if(newEmailSettings.password === "") {
-	newEmailSettings.password = emailPassword;
-    }
-    if(runCallbacByName("datastorageWrite", "email", newEmailSettings) === false) {
-	servicelog("Email database write failed");
-    }
-    servicelog("Updated User database.");
-}
-
-function processChangeUserPassword(cookie, data) {
-    servicelog("Client #" + cookie.count + " requests user password change.");
-    if(userHasPrivilige("system-admin", cookie.user)) {
-	var passwordChange = extractPasswordChangeFromInputData(data);
-	if(passwordChange === null) {
-	    runCallbacByName("processResetToMainState", cookie);
-	    return;
-	}
-
-	var newUsers = [];
-	runCallbacByName("datastorageRead", "users").users.forEach(function(u) {
-	    if(u.username !== passwordChange.userName) {
-		newUsers.push(u);
-	    } else {
-		newUsers.push({ applicationData: u.applicationData,
-				username: u.username,
-				hash: u.hash,
-				realname: u.realname,
-				email: u.email,
-				phone: u.phone,
-				language: u.language,
-				password: passwordChange.password });
-	    }
-	});
-	if(runCallbacByName("datastorageWrite", "users", { users: newUsers }) === false) {
-	    servicelog("User database write failed");
-	    setStatustoClient(cookie, "Password Change FAILED");
-	} else {
-	    servicelog("Updated password of user [" + JSON.stringify(passwordChange.userName) + "]");
-	    setStatustoClient(cookie, "Password Changed OK");
-	    processGainAdminMode(cookie);
-	    return;
-	}
-    } else {
-	servicelog("User " + cookie.user.username + " does not have priviliges to change passwords");
-    }
-    runCallbacByName("processResetToMainState", cookie);
-}
-
-function extractUserListFromInputData(data) {
-    if(data.items === undefined) {
-	servicelog("inputData does not contain items");
-	return null;
-    }
-    var userList = [];
-    data.items[0].frame.forEach(function(u) {
-	var user = { applicationData: { priviliges: [] } };
-	u.forEach(function(row) {
-	    if(row.length === 1) {
-		if(row[0].key === "username") {
-		    if(row[0].text !== undefined) {
-			user.username = row[0].text;
-			user.hash = sha1.hash(row[0].text);
-		    }
-		    if(row[0].value !== undefined) {
-			user.username = row[0].value;
-			user.hash = sha1.hash(row[0].value);
-		    }
-		}
-		if(row[0].key === "realname") { user.realname = row[0].value; }
-		if(row[0].key === "email") { user.email = row[0].value; }
-		if(row[0].key === "phone") { user.phone = row[0].value; }
-		if(row[0].key === "language") { user.language = row[0].selected; }
-	    } else {
-		var priviligeList = createPriviligeList().map(function(p) {
-		    return p.privilige;
-		}); 
-	    	row.forEach(function(item) {
-		    priviligeList.forEach(function(p) {
-			if(item.key === p) {
-			    if(item.checked) {
-				user.applicationData.priviliges.push(p);
-			    }
-			}
-		    });
-		});
-	    }
-	});
-	userList.push(user);
-    });
-    return userList;
-}
-
-function extractEmailSettingsFromInputData(data) {
-    if(data.buttonList === undefined) {
-	servicelog("inputData does not contain buttonList");
-	return null;
-    }
-    return { enabled: data.items[1].frame[0][1][0].checked,
-	     host: data.items[1].frame[1][1][0].value,
-	     user: data.items[1].frame[2][1][0].value,
-	     sender: data.items[1].frame[3][1][0].value,
-	     password: data.items[1].frame[4][1][0].value,
-	     ssl: data.items[1].frame[5][1][0].checked,
-	     blindlyTrust: data.items[1].frame[6][1][0].checked };
-}
-
-function extractPasswordChangeFromInputData(data) {
-    if(data.buttonData === undefined) {
-	servicelog("inputData does not contain buttonData");
-	return null;
-    }
-    if(data.items === undefined) {
-	servicelog("inputData does not contain items");
-	return null;
-    }
-    if(data.items[0] === undefined) {
-	servicelog("inputData.items is not an array");
-	return null;
-    }
-    if(data.items[0].frame === undefined) {
-	servicelog("inputData.items does not contain frame");
-	return null;
-    }
-    var passwordChange = data.items[0].frame.map(function(u) {
-	if(u[0][0].text === data.buttonData) {
-	    return { userName: u[0][0].text,
-		     password: getPasswordHash(u[0][0].text, u[6][1].value) };
-	}
-    }).filter(function(f){return f;})[0];
-    return passwordChange;
-}
-
-
-// User settings panel
-
-function processGetUserSettings(cookie, content) {
-    var token = createPendingRequest(cookie.user.email).token
-    if(!token) {
-	servicelog("Failed to create pending request");
-	processClientStarted(cookie);
-	return;
-    }
-    // because this is not an email request it can immediately be validated
-    var request = validatePendingRequest(token.mail);
-    if(request === false) {
-	servicelog("Failed to validate pending request");
-	processClientStarted(cookie);
-	return;
-    }
-    var newAccount = { checksum: request.checksum,
-		       isNewAccount: false,
-		       showAccountDeletePanel: true,
-		       email: cookie.user.email,
-		       username: cookie.user.username,
-		       realname: cookie.user.realname,
-		       phone: cookie.user.phone,
-		       language: cookie.user.language };
-
-    sendUserAccountModificationDialog(cookie, newAccount);
-    return;
-}
-
-
-// Email related functionality
-
-function generateEmailToken(email) {
-    return { mail: sha1.hash(email).slice(0, 8),
-	     key: sha1.hash(globalSalt + JSON.stringify(new Date().getTime())).slice(0, 16) };
+function getUserByHashedUserName(hash) {
+    return runCallbackByName("datastorageRead", "users").users.filter(function(u) {
+	return u.hash === hash;
+    })[0];
 }
 
 function getUserByEmail(email) {
-    var user = runCallbacByName("datastorageRead", "users").users.filter(function(u) {
+    var user = runCallbackByName("datastorageRead", "users").users.filter(function(u) {
 	return u.email === email;
     });
     if(user.length === 0) {
@@ -1537,201 +676,271 @@ function getUserNameByEmail(email) {
     }
 }
 
-function sendVerificationEmailRest(recipientAddress) {
-    var request = createPendingRequest(recipientAddress).request;
-    if(!request) {
-	servicelog("Failed to create pending request");
-	return {result: restStatusMessage("E_INTERNALERROR")};
-    }
-    if(request.isNewAccount) {
-	var dummycookie = { user: { language: runCallbacByName("datastorageRead", "main").main.defaultLanguage } };
-	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWACCOUNTREQUEST");
-	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWACCOUNTREQUEST"),
-				       applicationName,
-				       request.token.mail + request.token.key);
+function getUserByUsername(username) {
+    var user = runCallbackByName("datastorageRead", "users").users.filter(function(u) {
+	return u.username === username;
+    });
+    if(user.length === 0) {
+	return false;
     } else {
-	var dummycookie = { user: { language: getUserByEmail(recipientAddress).language } };
-	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWPASSWORDREQUEST");
-	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWPASSWORDREQUEST"),
-				       request.username,
-				       applicationName,
-				       request.token.mail + request.token.key);
+	return user[0];
     }
-    var mailDetails = { text: emailBody,
-			from: runCallbacByName("datastorageRead", "email").sender,
-			to: recipientAddress,
-			subject: emailSubject };
-    sendEmailRest(mailDetails, "account verification", false, false);
 }
 
-function sendVerificationEmail(cookie, recipientAddress) {
-    var request = createPendingRequest(recipientAddress).request;
-    if(request === false) {
+function getUserPriviliges(user) {
+    if(user.applicationData.priviliges.length === 0) { return []; }
+    if(user.applicationData.priviliges.indexOf("none") > -1) { return []; }
+    return user.applicationData.priviliges;
+}
+
+function userHasPrivilige(privilige, user) {
+    if(user.applicationData.priviliges.length === 0) { return false; }
+    if(user.applicationData.priviliges.indexOf(privilige) < 0) { return false; }
+    return true;
+}
+
+function getNewSessionKey() {
+    if(typeof this.counter == 'undefined' ) {
+	this.counter = 0;
+    }
+    this.counter++;
+    return (sha1.hash(globalSalt + new Date().getTime().toString() + this.counter));
+}
+
+
+// email handling functions
+
+function sendVerificationEmail(recipientAddress) {
+    var request = createPendingRequest(recipientAddress, false);
+    if(!request) {
 	servicelog("Failed to create pending request");
-	processClientStarted(cookie);
-	return;
+	return { result: restStatusMessage("E_INTERNALERROR"),
+		 message: "Internal Error" };
     }
     if(request.isNewAccount) {
-	var dummycookie = { user: { language: runCallbacByName("datastorageRead", "main").main.defaultLanguage } };
-	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWACCOUNTREQUEST");
-	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWACCOUNTREQUEST"),
-				       applicationName,
-				       request.token.mail + request.token.key);
+	var emailSubject = ui.getLanguageText(null, "EMAILSUBJECT_NEWACCOUNTREQUEST");
+	var emailBody = ui.fillTagsInText(ui.getLanguageText(null, "EMAILBODY_NEWACCOUNTREQUEST"),
+					  applicationName,
+					  request.token.mail + request.token.key);
     } else {
-	var dummycookie = { user: { language: getUserByEmail(recipientAddress).language } };
-	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWPASSWORDREQUEST");
-	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWPASSWORDREQUEST"),
-				       request.username,
-				       applicationName,
-				       request.token.mail + request.token.key);
+	var emailSubject = ui.getLanguageText(null, "EMAILSUBJECT_NEWPASSWORDREQUEST");
+	var emailBody = ui.fillTagsInText(ui.getLanguageText(null, "EMAILBODY_NEWPASSWORDREQUEST"),
+					  request.username,
+					  applicationName,
+					  request.token.mail + request.token.key);
     }
     var mailDetails = { text: emailBody,
-			from: runCallbacByName("datastorageRead", "email").sender,
+			from: runCallbackByName("datastorageRead", "email").sender,
 			to: recipientAddress,
 			subject: emailSubject };
-    sendEmail(cookie, mailDetails, false, "account verification", false, false);
+    sendEmail(mailDetails, "account verification");
+}
+
+function sendEmail(emailDetails, logLine) {
+    var emailData = runCallbackByName("datastorageRead", "email");
+    if(emailData.blindlyTrust) {
+	servicelog("Trusting self-signed certificates");
+	process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    }
+    email.server.connect({
+	user: emailData.user,
+	password: emailData.password,
+	host: emailData.host,
+	ssl: emailData.ssl
+    }).send(emailDetails, function(err, message) {
+	if(err) {
+	    servicelog(err + " : " + JSON.stringify(message));
+	} else {
+	    servicelog("Sent " + logline + " email to " + emailDetails.to);
+	}
+    });
 }
 
 function sendConfirmationEmails(account) {
     if(account.isNewAccount) {
-	var dummycookie = { user: { language: runCallbacByName("datastorageRead", "main").main.defaultLanguage } };
-	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWACCOUNTCONFIRM");
-	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWACCOUNTCONFIRM"),
+	var emailSubject = ui.getLanguageText(null, "EMAILSUBJECT_NEWACCOUNTCONFIRM");
+	var emailBody = ui.fillTagsInText(ui.getLanguageText(null, "EMAILBODY_NEWACCOUNTCONFIRM"),
 				       account.username,
 				       applicationName,
-				       runCallbacByName("datastorageRead", "main").main.siteFullUrl);
-	var adminEmailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWACCOUNTCREATED");
-	var adminEmailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWACCOUNTCREATED"),
+				       runCallbackByName("datastorageRead", "main").main.siteFullUrl);
+	var adminEmailSubject = ui.getLanguageText(null, "EMAILSUBJECT_NEWACCOUNTCREATED");
+	var adminEmailBody = ui.fillTagsInText(ui.getLanguageText(null, "EMAILBODY_NEWACCOUNTCREATED"),
 					    account.username,
 					    applicationName);
     } else {
-	var dummycookie = { user: { language: getUserByEmail(account.email).language } };
-	var emailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_NEWPASSWORDCONFIRM");
-	var emailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_NEWPASSWORDCONFIRM"),
+	var emailSubject = ui.getLanguageText(null, "EMAILSUBJECT_NEWPASSWORDCONFIRM");
+	var emailBody = ui.fillTagsInText(ui.getLanguageText(null, "EMAILBODY_NEWPASSWORDCONFIRM"),
 				       account.username,
 				       applicationName,
-				       runCallbacByName("datastorageRead", "main").main.siteFullUrl);
-	var adminEmailSubject = getLanguageText(dummycookie, "EMAILSUBJECT_USERHASCHANGEDPASSWORD");
-	var adminEmailBody = fillTagsInText(getLanguageText(dummycookie, "EMAILBODY_USERHASCHANGEDPASSWORD"),
+				       runCallbackByName("datastorageRead", "main").main.siteFullUrl);
+	var adminEmailSubject = ui.getLanguageText(null, "EMAILSUBJECT_USERHASCHANGEDPASSWORD");
+	var adminEmailBody = ui.fillTagsInText(ui.getLanguageText(null, "EMAILBODY_USERHASCHANGEDPASSWORD"),
 					    account.username,
 					    applicationName);
     }
     var mailDetails = { text: emailBody,
-			from: runCallbacByName("datastorageRead", "email").sender,
+			from: runCallbackByName("datastorageRead", "email").sender,
 			to: account.email,
 			subject: emailSubject };
-    sendEmailRest(mailDetails, "account confirmation", false, false);
-    var adminUserEmails = runCallbacByName("datastorageRead", "users").users.map(function(u) {
+    sendEmail(mailDetails, "account confirmation");
+    runCallbackByName("datastorageRead", "users").users.map(function(u) {
 	if(userHasPrivilige("system-admin", u)) { return u.email; }
     }).filter(function(f){return f;}).forEach(function(m) {
 	var mailDetails = { text: adminEmailBody,
-			    from: runCallbacByName("datastorageRead", "email").sender,
+			    from: runCallbackByName("datastorageRead", "email").sender,
 			    to: m,
 			    subject: adminEmailSubject };
-	sendEmailRest(mailDetails, "admin confirmation", false, false);
-    });
-}
-
-function sendEmailRest(emailDetails, logline) {
-    var emailData = runCallbacByName("datastorageRead", "email");
-    if(emailData.blindlyTrust) {
-	servicelog("Trusting self-signed certificates");
-	process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-    }
-    email.server.connect({
-	user: emailData.user,
-	password: emailData.password,
-	host: emailData.host,
-	ssl: emailData.ssl
-    }).send(emailDetails, function(err, message) {
-	if(err) {
-	    servicelog(err + " : " + JSON.stringify(message));
-	} else {
-	    servicelog("Sent " + logline + " email to " + emailDetails.to);
-	}
-    });
-}
-
-function sendEmail(cookie, emailDetails, logline) {
-    var emailData = runCallbacByName("datastorageRead", "email");
-    if(emailData.blindlyTrust) {
-	servicelog("Trusting self-signed certificates");
-	process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-    }
-
-    email.server.connect({
-	user: emailData.user,
-	password: emailData.password,
-	host: emailData.host,
-	ssl: emailData.ssl
-    }).send(emailDetails, function(err, message) {
-	if(err) {
-	    servicelog(err + " : " + JSON.stringify(message));
-	    setStatustoClient(cookie, "Failed sending email!");
-	} else {
-	    servicelog("Sent " + logline + " email to " + emailDetails.to);
-	    setStatustoClient(cookie, "Sent email");
-	}
+	sendEmail(mailDetails, "admin confirmation");
     });
 }
 
 
-// Language assist functions
+// Pending list handling
 
-function getLanguageText(cookie, tag) {
-    if(cookie === null) {
-	var language = runCallbacByName("datastorageRead", "main").main.defaultLanguage;
+function createPendingRequest(emailAddress, loggedIn) {
+    removePendingRequest(emailAddress);
+    var pendingData = runCallbackByName("datastorageRead", "pending");
+    var timeout = new Date();
+    var emailToken =  { mail: sha1.hash(emailAddress).slice(0, 8),
+			key: sha1.hash(globalSalt + JSON.stringify(new Date().getTime())).slice(0, 16) };
+    var username = getUserNameByEmail(emailAddress);
+    var isNewAccount = false;
+    if(username === "") { isNewAccount = true; }
+    timeout.setHours(timeout.getHours() + 24);
+    var request = { email: emailAddress,
+		    isNewAccount: isNewAccount,
+		    username: username,
+                    token: emailToken,
+                    date: timeout.getTime(),
+		    loggedIn: loggedIn,
+		    state: "pending" };
+    var checksum = sha1.hash(JSON.stringify(request));
+    request.checksum = checksum;
+    pendingData.pending.push(request);
+    if(runCallbackByName("datastorageWrite", "pending", pendingData) === false) {
+	servicelog("Pending database write failed");
+	return false;
     } else {
-	if(cookie.user !== undefined) {
-	    var language = cookie.user.language;
-	} else {
-	    var language = runCallbacByName("datastorageRead", "main").main.defaultLanguage;
+	servicelog("Created pending request");
+	return request;
+    }
+}
+
+function removePendingRequest(emailAdress) {
+    var pendingUserData = runCallbackByName("datastorageRead", "pending");
+    if(Object.keys(pendingUserData.pending).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return;
+    }
+    if(pendingUserData.pending.filter(function(u) {
+	return u.email === emailAdress;
+    }).length !== 0) {
+	servicelog("Removing existing entry from pending database");
+	var newPendingUserData = { pending: [] };
+	newPendingUserData.pending = pendingUserData.pending.filter(function(u) {
+            return u.email !== emailAdress;
+	});
+	if(runCallbackByName("datastorageWrite", "pending", newPendingUserData) === false) {
+            servicelog("Pending requests database write failed");
 	}
+    } else {
+	servicelog("no existing entries in pending database");
     }
-    var langData = runCallbacByName("datastorageRead" ,"language");
-    var langIndex = langData.languages.indexOf(language);
-    if(++langIndex === 0) { return "<no string found>"; }
-    if(langData.dictionary.filter(function(f) { return f.tag === tag }).length === 0) { return false; }
-    return langData.dictionary.filter(function(f) { return f.tag === tag })[0]["LANG" + langIndex];
 }
 
-function fillTagsInText(text) {
-    for(var i = 1; i < arguments.length; i++) {
-	var substituteString = "_SUBSTITUTE_TEXT_" + i + "_";
-	text = text.replace(substituteString, arguments[i]);
+function validatePendingRequest(emailHash) {
+    var pendingUserData = runCallbackByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingUserData).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return false;
     }
-    return text;
+    var target = pendingUserData.filter(function(u) {
+	return u.token.mail === emailHash.slice(0, 8);
+    });
+    if(target.length === 0) {
+	servicelog("Cannot find a pending request");
+	return false;
+    }
+    if(target[0].state != "pending") {
+	servicelog("Cannot validate a pending request in wrong state");
+	return false;
+    }
+    target[0].state = "validated";
+    var newPendingUserData = pendingUserData.filter(function(u) {
+	return u.token.mail !== emailHash.slice(0, 8);
+    });
+    newPendingUserData.push(target[0]);
+    if(runCallbackByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
+	servicelog("Pending requests database write failed");
+    }
+    servicelog("Validated pending request");
+    return target[0];
 }
 
-function setApplicationName(name) {
-    applicationName = name;
+function getValidatedPendingRequest(checksum) {
+    var pendingUserData = runCallbackByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingUserData).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return false;
+    } 
+    var target = pendingUserData.filter(function(u) {
+	return u.checksum === checksum;
+    });
+    if(target.length === 0) {
+	servicelog("Cannot find a pending request");
+	return false;
+    }
+    if(target[0].state !== "validated") {
+	servicelog("Cannot get a pending request in wrong state");
+	return false;
+    }
+    return target[0];
 }
 
-
-// Time out pending email verifications, run once every hour and check for
-// entries older than 24 hours.
+function commitPendingRequest(checksum) {
+    var pendingUserData = runCallbackByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingUserData).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return false;
+    } 
+    var target = pendingUserData.filter(function(u) {
+	return u.checksum === checksum;
+    });
+    if(target.length === 0) {
+	servicelog("Cannot find a pending request");
+	return false;
+    }
+    var newPendingUserData = [];
+    newPendingUserData = pendingUserData.filter(function(u) {
+	return u.checksum !== checksum;
+    });
+    if(runCallbackByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
+	servicelog("Pending requests database write failed");
+    }
+    return target[0];
+}
 
 setInterval(function() {
     var now = new Date().getTime();
-    var pendingData = runCallbacByName("datastorageRead", "pending");
+    var pendingData = runCallbackByName("datastorageRead", "pending");
     if(Object.keys(pendingData.pending).length === 0) {
 	servicelog("No pending requests to purge");
 	return;
     }
     var purgeCount = 0
     var newPendingData = { pending: [] };
-    pendingData.pending.forEach(function(r) {
-	if(r.date < now) {
+    pendingData.pending.forEach(function(p) {
+	if(p.date < now) {
 	    purgeCount++;
 	} else {
-	    newPendingData.pending.push(r);
+	    newPendingData.pending.push(p);
 	}
     });
     if(purgeCount === 0) {
 	servicelog("No pending requests timeouted");
 	return;
     } else {
-	if(runCallbacByName("datastorageWrite", "pending", newPendingData) === false) {
+	if(runCallbackByName("datastorageWrite", "pending", newPendingData) === false) {
 	    servicelog("Pending requests database write failed");
 	} else {
 	    servicelog("Removed " + purgeCount + " timeouted pending requests");
@@ -1740,35 +949,146 @@ setInterval(function() {
 }, 1000*60*60);
 
 
+// session list handling
+
+function createSession(key, username, token, serial) {
+    var sessionData = runCallbackByName("datastorageRead", "session");
+    var timeout = new Date();
+    timeout.setMinutes(timeout.getMinutes() + 10);
+    var request = { key: key,
+		    token: token,
+		    date: timeout,
+		    serial: serial,
+		    username: username }
+    sessionData.session.push(request);
+    if(runCallbackByName("datastorageWrite", "session", sessionData) === false) {
+	servicelog("Session database write failed");
+	return false;
+    } else {
+	servicelog("Created new session");
+	return true;
+    }
+}
+
+function getSessionByToken(token) {
+    var session = runCallbackByName("datastorageRead", "session").session.filter(function(s) {
+	return s.token === token;
+    });
+    if(session.length === 0) {
+	return false;
+    } else {
+	return session[0];
+    }
+}
+
+function refreshSessionByToken(token, data) {
+    var session = getSessionByToken(token);
+    if(!session) { return false }
+    var user = getUserByUsername(session.username);
+    if(!user) { return false }
+    var serialToken = JSON.parse(Aes.Ctr.decrypt(data, session.key, 128));
+    if(serialToken.token !== token) { return false }
+    var serial = parseInt(session.serial) + 1;
+    if(parseInt(serialToken.serial) !== serial) { return false }
+    var newSessionData = [];
+    var session;
+    var timeout = new Date();
+    timeout.setMinutes(timeout.getMinutes() + 10);
+    runCallbackByName("datastorageRead", "session").session.forEach(function(s) {
+	if(s.token === token) {
+	    s.date = timeout;
+	    s.serial = serial;
+	    session = s;
+	}
+	newSessionData.push(s);
+    });
+    if(runCallbackByName("datastorageWrite", "session", {session: newSessionData}) === false) {
+	servicelog("Session database write failed");
+	return false;
+    } else {
+//	servicelog("Updated session");
+	return session;
+    }
+}
+
+function deleteSessionByToken(token, data) {
+    var session = getSessionByToken(token);
+    if(!session) { return false }
+    var user = getUserByUsername(session.username);
+    if(!user) { return false }
+    var serialToken = JSON.parse(Aes.Ctr.decrypt(data, session.key, 128));
+    if(serialToken.token !== token) { return false }
+    var newSessionData = [];
+    runCallbackByName("datastorageRead", "session").session.forEach(function(s) {
+	if(s.token !== token) { newSessionData.push(s); }
+    });
+    if(runCallbackByName("datastorageWrite", "session", {session: newSessionData}) === false) {
+	servicelog("Session database write failed");
+	return false;
+    } else {
+	servicelog("Deleted session");
+	return true;
+    }
+}
+
+setInterval(function() {
+    var now = new Date().getTime();
+    var sessionData = runCallbackByName("datastorageRead", "session");
+    if(Object.keys(sessionData.session).length === 0) {
+	servicelog("No sessions to purge");
+	return;
+    }
+    var purgeCount = 0
+    var newSessionData = { session: [] };
+    sessionData.session.forEach(function(s) {
+	if(s.date < now) {
+	    purgeCount++;
+	} else {
+	    newSessionData.session.push(s);
+	}
+    });
+    if(purgeCount === 0) {
+	servicelog("No sessions timeouted");
+	return;
+    } else {
+	if(runCallbackByName("datastorageWrite", "session", newSessionData) === false) {
+	    servicelog("Session database write failed");
+	} else {
+	    servicelog("Removed " + purgeCount + " timeouted sessions");
+	}
+    }
+}, 1000*60);
+
+
 // Initialize internal datastorages
 
 function initializeDataStorages() {
-    runCallbacByName("datastorageInitialize", "main", { main: { version: 1,
+    runCallbackByName("datastorageInitialize", "main", { main: { version: 1,
 								port: 8080,
 								siteFullUrl: "http://url.to.my.site/",
 								emailVerification: false,
 								defaultLanguage: "english" } });
-    runCallbacByName("datastorageInitialize", "users", { users: [ { username: "test",
+    runCallbackByName("datastorageInitialize", "users", { users: [ { username: "test",
 								    hash: sha1.hash("test"),
 								    password: getPasswordHash("test", "test"),
 								    applicationData: { priviliges: ["system-admin"] },
 								    realname: "",
 								    email: "",
 								    phone: "",
-								    language: runCallbacByName("datastorageRead",
+								    language: runCallbackByName("datastorageRead",
 											       "main").main.defaultLanguage } ] }, true);
-    runCallbacByName("datastorageInitialize", "session", { session: [] });
-    runCallbacByName("datastorageInitialize", "pending", { pending: [] }, true);
-    runCallbacByName("datastorageInitialize", "email", { host: "smtp.your-email.com",
+    runCallbackByName("datastorageInitialize", "session", { session: [] });
+    runCallbackByName("datastorageInitialize", "pending", { pending: [] }, true);
+    runCallbackByName("datastorageInitialize", "email", { host: "smtp.your-email.com",
 							 user: "username",
 							 password: "password",
 							 sender: "you <username@your-email.com>",
 							 ssl: true,
 							 blindlyTrust: true });
-    runCallbacByName("datastorageInitialize", "language", { languages: [], dictionary: [] });
+    runCallbackByName("datastorageInitialize", "language", { languages: [], dictionary: [] });
 
     // sessions are cleared between restarts
-    runCallbacByName("datastorageWrite", "session", { session: [] });
+    runCallbackByName("datastorageWrite", "session", { session: [] });
 }
 
 
@@ -1780,7 +1100,7 @@ function setCallback(name, callback) {
     functionList.push({ name: name, function: callback });
 }
 
-function runCallbacByName(name, par1, par2, par3, par4, par5) {
+function runCallbackByName(name, par1, par2, par3, par4, par5) {
     for (var i = 0; i < functionList.length; i++) {
 	if(functionList[i]["name"] === name) {
 	    return functionList[i].function(par1, par2, par3, par4, par5);
@@ -1793,22 +1113,31 @@ function runCallbacByName(name, par1, par2, par3, par4, par5) {
 
 function startUiLoop() {
     initializeDataStorages();
-    if(runCallbacByName("datastorageRead", "language").languages.length === 0) {
+    if(runCallbackByName("datastorageRead", "language").languages.length === 0) {
 	servicelog("ERROR: Missing language definition file!");
 	servicelog("Copy the 'language.json' file from framework to './configuration/' directory!");
 	servicelog("Exiting program.");
 	process.exit(1);
     }
-    websocPort = runCallbacByName("datastorageRead", "main").main.port;
-    webServer.listen(websocPort, function() {
-	servicelog("Waiting for client connection to port " + websocPort + "...");
+    listenPort = runCallbackByName("datastorageRead", "main").main.port;
+    webServer.listen(listenPort, function() {
+	servicelog("Waiting for client connection to port " + listenPort + "...");
     });
 }
 
+module.exports.servicelog = servicelog;
+module.exports.setApplicationName = setApplicationName;
+module.exports.encrypt = encrypt;
+module.exports.decrypt = decrypt;
+module.exports.restStatusMessage = restStatusMessage;
 module.exports.startUiLoop = startUiLoop;
 module.exports.initializeDataStorages = initializeDataStorages;
 module.exports.setCallback = setCallback;
-module.exports.setApplicationName = setApplicationName;
+module.exports.runCallbackByName = runCallbackByName;
+module.exports.getUserByUsername = getUserByUsername;
+module.exports.userHasPrivilige = userHasPrivilige;
+module.exports.refreshSessionByToken = refreshSessionByToken;
+/*
 module.exports.createUiTextNode = createUiTextNode;
 module.exports.createUiTextArea = createUiTextArea;
 module.exports.createUiCheckBox = createUiCheckBox;
@@ -1819,7 +1148,7 @@ module.exports.createUiInputField = createUiInputField;
 module.exports.createUiHtmlCell = createUiHtmlCell;
 module.exports.createTopButtons = createTopButtons;
 module.exports.sendCipherTextToClient = sendCipherTextToClient;
-module.exports.servicelog = servicelog;
 module.exports.setStatustoClient = setStatustoClient;
 module.exports.userHasPrivilige = userHasPrivilige;
 module.exports.getConnectionList = getConnectionList;
+*/
