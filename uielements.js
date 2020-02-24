@@ -91,7 +91,7 @@ function createTopButtons(session, additionalButtonList, adminRequest) {
 	}
     } else {
 	topButtonList.push( { id: id++,
-			      text: "User Settings",
+			      text: getLanguageText(session, "BUTTON_ACCOUNTMODIFY"),
 			      callbackFunction: "postEncrypted('/api/useraccountpanel', {}); return false;" } );
     }
     return topButtonList;

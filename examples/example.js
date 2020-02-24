@@ -100,8 +100,12 @@ function createMainUiPanel(session) {
     var data = { type: "createUiPage",
 		 content: { topButtonList: topButtonList,
                             frameList: frameList,
-			    buttonList: [ { id: 501, text: "OK", callbackMessage: "sendOkMessage" },
-                                          { id: 502, text: "Cancel",  callbackMessage: "sendCancelMessage" } ] } };
+			    buttonList: [ { id: 501,
+					    text: ui.getLanguageText(session, "BUTTON_OK"),
+					    callbackMessage: "sendOkMessage" },
+                                          { id: 502,
+					    text: ui.getLanguageText(session, "BUTTON_CANCEL"),
+					    callbackMessage: "sendCancelMessage" } ] } };
     return { result: framework.restStatusMessage("E_OK"),
 	     message: "Login OK",
 	     type: "T_UIWINDOWREQUEST",
@@ -123,7 +127,7 @@ function processClickedMyBox(session, data) {
 
 function processGetHelpMessage(session, data) {
     framework.servicelog("received getHelpMessage message");
-    var helpWebPage = Buffer.from(createHeloHtmlPage());
+    var helpWebPage = Buffer.from(createHelpHtmlPage());
     var data = { type: "showHtmlPage",
 		 content: helpWebPage.toString("ascii") };
     return { result: framework.restStatusMessage("E_OK"),
