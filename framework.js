@@ -142,6 +142,14 @@ function handleRestMessage(url, postData) {
 	return processAdminPanelRequest(postData);
     }
 
+    if(url.split("/")[2] === "adminchange") {
+	return processAdminAccountChangeMessage(postData);
+    }
+
+    if(url.split("/")[2] === "changepassword") {
+	return processChangeUserPasswordMessage(postData);
+    }
+    
     if(url.split("/")[2] === "useraccountpanel") {
 	return processUserAccountRequest(postData);
     }
@@ -499,7 +507,7 @@ function sendAdminDialog(session) {
 			 [ ui.createUiSelectionList("language", runCallbackByName("datastorageRead" ,"language").
 						    languages, u.language, true, false, false) ],
 			 userPriviliges,
-		         [ ui.createUiMessageButton("Change", "changeUserPassword", u.username),
+		         [ ui.createUiMessageButton("Change", "/api/changepassword/", u.username),
 			   ui.createUiInputField("password", "", 10, true) ] ] )
 	});
 	var emptyPriviligeList = [];
@@ -558,7 +566,7 @@ function sendAdminDialog(session) {
 				frameList: frameList,
 				buttonList: [ { id: 501,
 						text: ui.getLanguageText(null, "BUTTON_OK"),
-						callbackMessage: "saveAdminData" },
+						callbackUrl: "/api/adminchange/" },
 					      { id: 502,
 						text: ui.getLanguageText(null, "BUTTON_CANCEL"),
 						callbackFunction: "postEncrypted('/api/window/0', {}); return false;" } ] } };
@@ -587,6 +595,191 @@ function processAdminPanelRequest(data) {
     }
     return sendAdminDialog(session)
 }
+
+function processAdminAccountChangeMessage(data) {
+    var session = refreshSessionByToken(data.token, data.data);
+    if(!session) {
+	servicelog("Incoming message verification failed");
+	return {result: restStatusMessage("E_VERIFYSESSION")};
+    }
+    if(!userHasPrivilige("system-admin", getUserByUsername(session.username))) {
+	servicelog("User has no administration priviliges");
+	return {result: restStatusMessage("E_PRIVILIGE")};
+    }
+    var accountData = JSON.parse(Aes.Ctr.decrypt(data.data, session.key, 128)).data;
+    var userList = extractUserListFromInputData(accountData);
+    var emailSettings = extractEmailSettingsFromInputData(accountData);
+    if(userList === null) {
+	// see if this is OK?
+	servicelog("------------------------------??")
+	return sendAdminDialog(session)
+    }
+    var newUsers = [];
+    var oldUsers = runCallbackByName("datastorageRead", "users").users;
+    userList.forEach(function(n) {
+	var flag = true;
+	oldUsers.forEach(function(u) {
+	    if(n.username === u.username) {
+		flag = false;
+		n.password = u.password;
+		newUsers.push(n);
+	    }
+	});
+	if(flag) {
+	    n.password = "";
+	    newUsers.push(n);
+	}
+    });
+    if(runCallbackByName("datastorageWrite", "users", { users: newUsers }) === false) {
+	servicelog("User database write failed");
+    }
+    var main = runCallbackByName("datastorageRead", "main").main;
+    main.emailVerification = emailSettings.enabled;
+    if(runCallbackByName("datastorageWrite", "main", { main: main }) === false) {
+	servicelog("Main database write failed");
+    }
+    var emailPassword = runCallbackByName("datastorageRead", "email").password;
+    var newEmailSettings = { host: emailSettings.host,
+			     user: emailSettings.user,
+			     sender: emailSettings.sender,
+			     password: emailSettings.password,
+			     ssl: emailSettings.ssl,
+			     blindlyTrust: emailSettings.blindlyTrust };
+    if(newEmailSettings.password === "") {
+	newEmailSettings.password = emailPassword;
+    }
+    if(runCallbackByName("datastorageWrite", "email", newEmailSettings) === false) {
+	servicelog("Email database write failed");
+    }
+    servicelog("Updated User database.");
+    return createMainWindow(session);
+}
+
+function processChangeUserPasswordMessage(data) {
+    var session = refreshSessionByToken(data.token, data.data);
+    if(!session) {
+	servicelog("Incoming message verification failed");
+	return {result: restStatusMessage("E_VERIFYSESSION")};
+    }
+    if(!userHasPrivilige("system-admin", getUserByUsername(session.username))) {
+	servicelog("User has no administration priviliges");
+	return {result: restStatusMessage("E_PRIVILIGE")};
+    }
+    var accountData = JSON.parse(Aes.Ctr.decrypt(data.data, session.key, 128)).data;
+    var passwordChange = extractPasswordChangeFromInputData(accountData);
+    if(passwordChange === null) {
+	servicelog("--------------xxxxxxxxxxxxx")
+	return sendAdminDialog(session)
+    }
+    var newUsers = [];
+    runCallbackByName("datastorageRead", "users").users.forEach(function(u) {
+	if(u.username !== passwordChange.userName) {
+	    newUsers.push(u);
+	} else {
+	    newUsers.push({ applicationData: u.applicationData,
+			    username: u.username,
+			    hash: u.hash,
+			    realname: u.realname,
+			    email: u.email,
+			    phone: u.phone,
+			    language: u.language,
+			    password: passwordChange.password });
+	}
+    });
+    if(runCallbackByName("datastorageWrite", "users", { users: newUsers }) === false) {
+	servicelog("User database write failed");
+	return {result: restStatusMessage("E_INTERNALERROR")};
+    } else {
+	servicelog("Updated password of user [" + JSON.stringify(passwordChange.userName) + "]");
+	return sendAdminDialog(session);
+    }
+}
+
+function extractUserListFromInputData(data) {
+    if(data.items === undefined) {
+	servicelog("inputData does not contain items");
+	return null;
+    }
+    var userList = [];
+    data.items[0].frame.forEach(function(u) {
+	var user = { applicationData: { priviliges: [] } };
+	u.forEach(function(row) {
+	    if(row.length === 1) {
+		if(row[0].key === "username") {
+		    if(row[0].text !== undefined) {
+			user.username = row[0].text;
+			user.hash = sha1.hash(row[0].text);
+		    }
+		    if(row[0].value !== undefined) {
+			user.username = row[0].value;
+			user.hash = sha1.hash(row[0].value);
+		    }
+		}
+		if(row[0].key === "realname") { user.realname = row[0].value; }
+		if(row[0].key === "email") { user.email = row[0].value; }
+		if(row[0].key === "phone") { user.phone = row[0].value; }
+		if(row[0].key === "language") { user.language = row[0].selected; }
+	    } else {
+		var priviligeList = createPriviligeList().map(function(p) {
+		    return p.privilige;
+		}); 
+	    	row.forEach(function(item) {
+		    priviligeList.forEach(function(p) {
+			if(item.key === p) {
+			    if(item.checked) {
+				user.applicationData.priviliges.push(p);
+			    }
+			}
+		    });
+		});
+	    }
+	});
+	userList.push(user);
+    });
+    return userList;
+}
+
+function extractEmailSettingsFromInputData(data) {
+    if(data.buttonList === undefined) {
+	servicelog("inputData does not contain buttonList");
+	return null;
+    }
+    return { enabled: data.items[1].frame[0][1][0].checked,
+	     host: data.items[1].frame[1][1][0].value,
+	     user: data.items[1].frame[2][1][0].value,
+	     sender: data.items[1].frame[3][1][0].value,
+	     password: data.items[1].frame[4][1][0].value,
+	     ssl: data.items[1].frame[5][1][0].checked,
+	     blindlyTrust: data.items[1].frame[6][1][0].checked };
+}
+
+function extractPasswordChangeFromInputData(data) {
+    if(data.buttonData === undefined) {
+	servicelog("inputData does not contain buttonData");
+	return null;
+    }
+    if(data.items === undefined) {
+	servicelog("inputData does not contain items");
+	return null;
+    }
+    if(data.items[0] === undefined) {
+	servicelog("inputData.items is not an array");
+	return null;
+    }
+    if(data.items[0].frame === undefined) {
+	servicelog("inputData.items does not contain frame");
+	return null;
+    }
+    var passwordChange = data.items[0].frame.map(function(u) {
+	if(u[0][0].text === data.buttonData) {
+	    return { userName: u[0][0].text,
+		     password: getPasswordHash(u[0][0].text, u[6][1].value) };
+	}
+    }).filter(function(f){return f;})[0];
+    return passwordChange;
+}
+
+
 
 function processUserAccountRequest(data) {
     var session = refreshSessionByToken(data.token, data.data);
