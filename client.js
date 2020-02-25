@@ -231,9 +231,9 @@ function createTopButtons(inputData) {
 	    var button = document.createElement('button');
 	    button.appendChild(document.createTextNode(b.text));
 	    button.id = b.id;
-	    if(b.callbackMessage != undefined) {
+	    if(b.callbackUrl != undefined) {
 		button.onclick = function() {
-		    postEncrypted(b.callbackMessage, inputData);
+		    postEncrypted(b.callbackUrl, inputData);
 		    return false;
 		};
 	    }
@@ -260,13 +260,13 @@ function createAcceptButtons(inputData) {
 	var button = document.createElement('button');
 	button.appendChild(document.createTextNode(b.text));
 	button.id = b.id;
-	if(b.callbackMessage != undefined) {
+	if(b.callbackUrl != undefined) {
 	    button.onclick = function() {
 		var freshData = { user: inputData.user,
 				  priviliges: inputData.priviliges,
 				  items: refreshInputDataItems(inputData, false),
 				  buttonList: inputData.buttonList };
-		postEncrypted(b.callbackMessage, freshData);
+		postEncrypted(b.callbackUrl, freshData);
 		return false;
 	    };
 	}
@@ -519,13 +519,13 @@ function createTypedObject(id, item, inputData) {
 	    if(!i.active) {
 		button.disabled = true;
 	    }
-	    if(i.callbackMessage != undefined) {
-		newItem.callbackMessage = i.callbackMessage;
+	    if(i.callbackUrl != undefined) {
+		newItem.callbackUrl = i.callbackUrl;
 		button.onclick = function() {
-		    postEncrypted(i.callbackMessage, { buttonId: i.itemId,
-						       buttonData: i.data,
-						       items: refreshInputDataItems(inputData,
-										    false) });
+		    postEncrypted(i.callbackUrl, { buttonId: i.itemId,
+						   buttonData: i.data,
+						   items: refreshInputDataItems(inputData,
+										false) });
 		    return false;
 		};
 	    }
@@ -618,7 +618,7 @@ function getTypedObjectTemplateById(item, fullData) {
 			     text: i.text,
 			     itemId: i.itemId,
 			     data: i.data,
-			     callbackMessage: i.callbackMessage,
+			     callbackUrl: i.callbackUrl,
 			     active: i.active } );
 	}
 	if(i.itemType === "input") {

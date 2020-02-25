@@ -30,9 +30,9 @@ function createUiSelectionList(key, list, selected, active, hidden, zeroOption, 
 	     hidden: hidden, zeroOption: zeroOption, onSelectFunction: onSelectFunction };
 }
 
-function createUiMessageButton(text, callbackMessage, data, active) {
+function createUiMessageButton(text, callbackUrl, data, active) {
     if(active === undefined) { active = true; }
-    return { itemType: "button", text: text, callbackMessage: callbackMessage, data: data,
+    return { itemType: "button", text: text, callbackUrl: callbackUrl, data: data,
 	     active: active };
 }
 
