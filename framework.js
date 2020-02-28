@@ -335,33 +335,33 @@ function processValidateAccountMessage(data) {
 	    newAccount.phone = user.phone;
 	    newAccount.language = user.language;
 	}
-	return sendUserAccountModificationDialog(newAccount, request.token.key, false);
+	return sendUserAccountModificationDialog(newAccount, request.token.key, false, null);
     }    
 }
 
-function sendUserAccountModificationDialog(account, key, loggedin) {
+function sendUserAccountModificationDialog(account, key, loggedin, session) {
     var title = "";
     var configurationItems = [];
-    configurationItems.push([ [ ui.createUiTextNode("email", ui.getLanguageText(null, "TERM_EMAIL") + ":") ],
+    configurationItems.push([ [ ui.createUiTextNode("email", ui.getLanguageText(session, "TERM_EMAIL") + ":") ],
 			      [ ui.createUiInputField("emailInput", account.email, 15, false) ] ]);
     if(account.isNewAccount) {
-	title = ui.getLanguageText(null, "PROMPT_CREATENEWACCOUNT");
-	configurationItems.push([ [ ui.createUiTextNode("username", ui.getLanguageText(null, "TERM_USERNAME") + ":") ],
+	title = ui.getLanguageText(session, "PROMPT_CREATENEWACCOUNT");
+	configurationItems.push([ [ ui.createUiTextNode("username", ui.getLanguageText(session, "TERM_USERNAME") + ":") ],
 				  [ ui.createUiInputField("usernameInput", account.username, 15, false) ] ]);
     } else {
-	title = ui.getLanguageText(null, "PROMPT_MODIFYOLDACCOUNT");
-	configurationItems.push([ [ ui.createUiTextNode("username", ui.getLanguageText(null, "TERM_USERNAME") + ":") ],
+	title = ui.getLanguageText(session, "PROMPT_MODIFYOLDACCOUNT");
+	configurationItems.push([ [ ui.createUiTextNode("username", ui.getLanguageText(session, "TERM_USERNAME") + ":") ],
 				  [ ui.createUiInputField("usernameInput", account.username, 15, false, true) ] ]);
     }
-    configurationItems.push([ [ ui.createUiTextNode("realname", ui.getLanguageText(null, "TERM_REALNAME")) ],
+    configurationItems.push([ [ ui.createUiTextNode("realname", ui.getLanguageText(session, "TERM_REALNAME")) ],
 			      [ ui.createUiInputField("realnameInput", account.realname, 15, false) ] ]);
-    configurationItems.push([ [ ui.createUiTextNode("phone", ui.getLanguageText(null, "TERM_PHONE")) ],
+    configurationItems.push([ [ ui.createUiTextNode("phone", ui.getLanguageText(session, "TERM_PHONE")) ],
 			      [ ui.createUiInputField("phoneInput", account.phone, 15, false) ] ]);
-    configurationItems.push([ [ ui.createUiTextNode("language", ui.getLanguageText(null, "TERM_LANGUAGE")) ],
+    configurationItems.push([ [ ui.createUiTextNode("language", ui.getLanguageText(session, "TERM_LANGUAGE")) ],
 			      [ ui.createUiSelectionList("languageInput", runCallbackByName("datastorageRead" ,"language").languages, account.language, true, false, false) ] ]);
-    configurationItems.push([ [ ui.createUiTextNode("password1", ui.getLanguageText(null, "TERM_PASSWORD")) ],
+    configurationItems.push([ [ ui.createUiTextNode("password1", ui.getLanguageText(session, "TERM_PASSWORD")) ],
 			      [ ui.createUiInputField("passwordInput1", "", 15, true) ] ]);
-    configurationItems.push([ [ ui.createUiTextNode("password2", ui.getLanguageText(null, "TERM_REPEATPASSWORD")) ],
+    configurationItems.push([ [ ui.createUiTextNode("password2", ui.getLanguageText(session, "TERM_REPEATPASSWORD")) ],
 			      [ ui.createUiInputField("passwordInput2", "", 15, true) ] ]);
     var configurationItemList = { title: title,
 				  frameId: 0,
@@ -370,11 +370,11 @@ function sendUserAccountModificationDialog(account, key, loggedin) {
 				  items: configurationItems };
     var frameList = [ { frameType: "fixedListFrame", frame: configurationItemList } ];
     if(account.showAccountDeletePanel) {
-	var deleteAccountItemList = { title: ui.getLanguageText(null, "PROMPT_DELETEACCOUNT"),
+	var deleteAccountItemList = { title: ui.getLanguageText(session, "PROMPT_DELETEACCOUNT"),
 				      frameId: 1,
 				      header: [ [ [ ui.createUiHtmlCell("", "") ] ] ],
 				      rowNumbers: false,
-				      items: [ [ [ ui.createUiFunctionButton(ui.getLanguageText(null, "BUTTON_DELETEACCOUNT"), "if(confirm('" + ui.getLanguageText(null, 'PROMPT_CONFIRMDELETEACCOUNT') + "')) { sendToServerEncrypted('deleteAccountMessage', { }); }") ] ] ] };
+				      items: [ [ [ ui.createUiFunctionButton(ui.getLanguageText(session, "BUTTON_DELETEACCOUNT"), "if(confirm('" + ui.getLanguageText(session, 'PROMPT_CONFIRMDELETEACCOUNT') + "')) { sendToServerEncrypted('deleteAccountMessage', { }); }") ] ] ] };
 	frameList.push({ frameType: "fixedListFrame", frame: deleteAccountItemList });
     }
     if(loggedin) {
@@ -386,11 +386,11 @@ function sendUserAccountModificationDialog(account, key, loggedin) {
     var data = { type: "createUiPage",
                  content: { frameList: frameList,
 			    buttonList: [ { id: 501,
-					    text: ui.getLanguageText(null, "BUTTON_CANCEL"),
-					    callbackFunction: "sessionKey=''; postData('/api/start', {}); return false;" },
+					    text: ui.getLanguageText(session, "BUTTON_CANCEL"),
+					    callbackFunction: "postEncrypted('/api/window/0', {}); return false;" },
 					  { id: 502,
-					    text: ui.getLanguageText(null, "BUTTON_OK"),
-					    callbackFunction: callbackFunction }]}};
+					    text: ui.getLanguageText(session, "BUTTON_OK"),
+					    callbackFunction: callbackFunction } ] } };
     return { result: restStatusMessage("E_OK"),
 	     message: "Change Account",
 	     type: "T_USERMODIFICATIONUI",
@@ -420,9 +420,9 @@ function processUserAccountChangeMessage(data, loggedin) {
     }
     var accountData;
     var checkSum;
-
+    var session;
     if(loggedin) {
-	var session = getSessionByToken(data.token);
+	session = getSessionByToken(data.token);
 	if(!session) {
 	    servicelog("Cannot determine session in User account change.");
 	    return {result: restStatusMessage("E_FORMAT")};
@@ -435,7 +435,8 @@ function processUserAccountChangeMessage(data, loggedin) {
 	}
 	checkSum = accountData.data.checksum;
 	accountData = accountData.data.data;	
-    } else {  
+    } else {
+	session = null;
 	var request = getValidatedPendingRequest(data.checksum);
 	if(!request) {
 	    servicelog("Cannot get a validated pending request");
@@ -453,19 +454,19 @@ function processUserAccountChangeMessage(data, loggedin) {
     if(findObjectByKey(accountData, "key", "usernameInput").value.length === 0) {
 	account.username = "";
 	servicelog("User attempted to create empty username");
-	return sendUserAccountModificationDialog(account, request.token.key, loggedin);
+	return sendUserAccountModificationDialog(account, request.token.key, loggedin, session);
     }
     if(request.isNewAccount && (getUserByUsername(findObjectByKey(accountData, "key", "usernameInput").value) !== false)) {
 	account.username = "";
 	servicelog("User attempted to create an existing username");
-	return sendUserAccountModificationDialog(account, request.token.key, loggedin);
+	return sendUserAccountModificationDialog(account, request.token.key, loggedin, session);
     } else {
 	account.username = findObjectByKey(accountData, "key", "usernameInput").value;
     }
     if(findObjectByKey(accountData, "key", "passwordInput1").value !==
        findObjectByKey(accountData, "key", "passwordInput2").value) {
 	servicelog("Password mismatch in account change dialog");
-	return sendUserAccountModificationDialog(account, request.token.key, loggedin);
+	return sendUserAccountModificationDialog(account, request.token.key, loggedin, session);
     }
     account.password = findObjectByKey(accountData, "key", "passwordInput1").value;
     changeUserAccount(account);
@@ -788,7 +789,7 @@ function processUserAccountRequest(data) {
 	return {result: restStatusMessage("E_VERIFYSESSION")};
     }
     var account = createLoggedinUserAccountChange(session);
-    return sendUserAccountModificationDialog(account, session.key, true);
+    return sendUserAccountModificationDialog(account, session.key, true, session);
 }
 
 // User handling functions
