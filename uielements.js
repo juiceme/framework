@@ -82,11 +82,11 @@ function createTopButtons(session, additionalButtonList, adminRequest) {
     if(framework.userHasPrivilige("system-admin", framework.getUserByUsername(session.username))) {
 	if(adminRequest) {
 	    topButtonList.push( { id: id++,
-				  text: "User Mode",
+				  text: getLanguageText(session, "BUTTON_USERMODE"),
 				  callbackFunction: "postEncrypted('/api/window/0', {}); return false;" } );
 	} else {
 	    topButtonList.push( { id: id++,
-				  text: "Admin Mode",
+				  text: getLanguageText(session, "BUTTON_ADMINMODE"),
 				  callbackFunction: "postEncrypted('/api/adminpanel', {}); return false;" } );
 	}
     } else {
