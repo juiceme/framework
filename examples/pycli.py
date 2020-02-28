@@ -50,7 +50,8 @@ class ExampleConnection:
                 return True
 
     def get_window(self, number):
-        encrypted_data = pyaes.encrypt_message(self.key, json.dumps( { "serial": self.serial + 1,
+        self.serial = self.serial + 1
+        encrypted_data = pyaes.encrypt_message(self.key, json.dumps( { "serial": self.serial,
                                                                        "token": self.token } ) )
         url = "http://" + self.server + ":" + str(self.port) + "/api/window/" + str(number)
         data = { "token": self.token,
@@ -62,12 +63,39 @@ class ExampleConnection:
         else:
             return json.loads(res._content.decode('utf-8'))
 
+    def send_message(self, operation, url):
+        self.serial = self.serial + 1
+        encrypted_data = pyaes.encrypt_message(self.key, json.dumps( { "serial": self.serial,
+                                                                       "token": self.token,
+                                                                       "operation": operation } ) )
+        url = "http://" + self.server + ":" + str(self.port) + url
+        data = { "token": self.token,
+                 "data":  encrypted_data }
+        res = requests.post(url, data=json.dumps(data))
+        if res.status_code != 200:
+            print("Error: cannot post message")
+            return False
+        else:
+            if json.loads(res._content)["result"]["result"] == "E_OK":
+                return pyaes.decrypt_message(self.key, json.loads(res._content)["data"])
+            else:
+                return json.loads(res._content)["result"]
+
+    def send_pushme(self):
+        return self.send_message("post", "/api/application/pushme")
+
+    def get_config(self):
+        return self.send_message("get", "/api/config/session")
+    
+        
 
 #---------------
 
 connection = ExampleConnection("localhost", "8080")
 if connection.check() is False:
     sys.exit("Cannot connect to the server")
-connection.do_login("test", "test")
-window = connection.get_window(0)
-print(window["result"])
+if connection.do_login("test", "test") is True:
+    #window = connection.get_window(0)
+    # print(window["result"])
+    #connection.send_pushme()
+    print(connection.get_config())

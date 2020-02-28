@@ -43,6 +43,7 @@ function restStatusMessage(status) {
     if(status === "E_UNKNOWNWINDOW") { text = "Cannot create unknown window"; }
     if(status === "E_INTERNALERROR") { text = "Server internal error"; }
     if(status === "E_PRIVILIGE") { text = "User does not have privilige"; }
+    if(status === "E_UNKNOWNITEM") { text = "Unknown configuration item"; }
     return {result:status, text:text};
 }
 
@@ -89,6 +90,7 @@ var webServer = http.createServer(function(request, response){
 	servicelog("Respond with client to: " + JSON.stringify(request.headers));
     }
     if(request.method === "PUT") {
+	// put requests are not handled
 	response.writeHeader(200, { "Content-Type": "text/html",
                                     "X-Frame-Options": "deny",
                                     "X-XSS-Protection": "1; mode=block",
@@ -171,6 +173,10 @@ function handleRestMessage(url, postData) {
 	    // if not handled here, defer to application
 	    return runCallbackByName("handleApplicationMessage", url, postData)
 	}
+    }
+
+    if(url.split("/")[2] === "config") {
+	return processConfigRequest(url, postData)
     }
 
     // call that are not caught by framework are handled by application
@@ -791,6 +797,53 @@ function processUserAccountRequest(data) {
     var account = createLoggedinUserAccountChange(session);
     return sendUserAccountModificationDialog(account, session.key, true, session);
 }
+
+
+// configuration requests
+
+function processConfigRequest(url, data) {
+    var session = refreshSessionByToken(data.token, data.data);
+    if(!session) {
+	servicelog("Incoming message verification failed");
+	return {result: restStatusMessage("E_VERIFYSESSION")};
+    }
+    if(!userHasPrivilige("system-admin", getUserByUsername(session.username))) {
+	servicelog("User has no administration priviliges");
+	return {result: restStatusMessage("E_PRIVILIGE")};
+    }
+    var operation = JSON.parse(Aes.Ctr.decrypt(data.data, session.key, 128)).operation;
+    if(operation === "get") {
+	var key = url.split("/")[3];
+	var configData = runCallbackByName("datastorageRead", key)[key]
+	if(configData === undefined) {
+	    return {result: restStatusMessage("E_UNKNOWNITEM")};
+	}
+	var item = url.split("/")[4];
+	var value = url.split("/")[5];
+	var data;
+	if(item === "" || item === undefined) {
+	    data = configData;
+	} else {
+	    if(value === "" || value === undefined) {
+		return {result: restStatusMessage("E_UNKNOWNITEM")};
+	    }
+	    data = [];
+	    configData.forEach(function(d) {
+		if(d[item] == value) {
+		    data.push(d)
+		}
+	    });
+	}
+	return { result: restStatusMessage("E_OK"),
+		 token: session.token,
+		 data: Aes.Ctr.encrypt(JSON.stringify(data), session.key, 128) };
+    }
+    if(operation === "post") {
+	return {result: restStatusMessage("E_UNIMPLEMENTED")};
+    }
+    return {result: restStatusMessage("E_UNIMPLEMENTED")};
+}
+
 
 // User handling functions
 
