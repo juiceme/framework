@@ -6,7 +6,7 @@
     "Framework",
     "AES"
   ],
-  "version": "0.0.1",
+  "version": "0.0.2",
   "homepage": "http://www.swagman.org/",
   "author": {
     "name": "Jussi Ohenoja",
@@ -23,8 +23,7 @@
   },
   "devDependencies": {},
   "dependencies": {
-    "emailjs": "^2.2.0",
-    "websocket": "^1.0.31"
+    "emailjs": "^2.2.0"
   },
   "scripts": {
     "install": "git submodule init; git submodule update"
