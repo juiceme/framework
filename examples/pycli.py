@@ -26,7 +26,7 @@ class ExampleConnection:
             return True
         else:
             return False
-    
+
     def do_login(self, username, password):
         url = "http://" + self.server + ":" + str(self.port) + "/api/login"
         hashed_username = hashlib.sha1(username.encode('utf-8')).hexdigest()
@@ -49,13 +49,28 @@ class ExampleConnection:
                 print("login succeeded")
                 return True
 
+    def do_logout(self):
+        self.serial = self.serial + 1
+        encrypted_data = pyaes.encrypt_message(self.key, json.dumps( { "serial": self.serial,
+                                                                       "token": self.token } ) )
+        url = "http://" + self.server + ":" + str(self.port) + "/api/logout"
+        data = { "token": self.token, "data":  encrypted_data }
+        res = requests.post(url, data=json.dumps(data))
+        if res.status_code != 200:
+            print("Error: cannot post message")
+            return False
+        else:
+            if json.loads(res._content.decode('utf-8'))["result"]["result"] == "E_OK":
+                return True
+            else:
+                return False
+
     def get_window(self, number):
         self.serial = self.serial + 1
         encrypted_data = pyaes.encrypt_message(self.key, json.dumps( { "serial": self.serial,
                                                                        "token": self.token } ) )
         url = "http://" + self.server + ":" + str(self.port) + "/api/window/" + str(number)
-        data = { "token": self.token,
-                 "data":  encrypted_data }
+        data = { "token": self.token, "data":  encrypted_data }
         res = requests.post(url, data=json.dumps(data))
         if res.status_code != 200:
             print("Error: cannot post message")
@@ -69,8 +84,7 @@ class ExampleConnection:
                                                                        "token": self.token,
                                                                        "operation": operation } ) )
         url = "http://" + self.server + ":" + str(self.port) + url
-        data = { "token": self.token,
-                 "data":  encrypted_data }
+        data = { "token": self.token, "data":  encrypted_data }
         res = requests.post(url, data=json.dumps(data))
         if res.status_code != 200:
             print("Error: cannot post message")
@@ -84,10 +98,10 @@ class ExampleConnection:
     def send_pushme(self):
         return self.send_message("post", "/api/application/pushme")
 
-    def get_config(self):
-        return self.send_message("get", "/api/config/session")
-    
-        
+    def get_config(self, url):
+        return self.send_message("get", url)
+
+
 
 #---------------
 
@@ -98,4 +112,7 @@ if connection.do_login("test", "test") is True:
     #window = connection.get_window(0)
     # print(window["result"])
     #connection.send_pushme()
-    print(connection.get_config())
+    print(connection.get_config("/api/config/users"))
+    print(connection.get_config("/api/config/session"))
+    print(connection.get_config("/api/config/pending"))
+    connection.do_logout()
