@@ -110,7 +110,7 @@ function getLanguageText(session, tag) {
 	    var language = framework.runCallbackByName("datastorageRead", "main").main.defaultLanguage;
 	}
     }
-    var langData = framework.runCallbackByName("datastorageRead" ,"language");
+    var langData = framework.runCallbackByName("datastorageRead" ,"language").language;
     var langIndex = langData.languages.indexOf(language);
     if(++langIndex === 0) { return "<no string found>"; }
     if(langData.dictionary.filter(function(f) { return f.tag === tag }).length === 0) { return false; }

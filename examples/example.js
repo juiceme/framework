@@ -22,11 +22,12 @@ function handleApplicationMessage(url, message) {
 
 
 // Administration UI panel requires application to provide needed priviliges
+// These can be used when restricting users for certain database operations etc.
 
 function createAdminPanelUserPriviliges() {
     // at least a "view" privilige is nice-to-have, add others as you need them.
     return [ { privilige: "view", code: "v" },
-	     { privilige: "preview", code: "pv" } ];
+	     { privilige: "modify", code: "m" } ];
 }
 
 
@@ -147,7 +148,10 @@ function processShowPreviewMessage(session, data) {
 
 // Initialize application-specific datastorages
 
-datastorage.initialize("mystorage", { storage: [] }, true);
+datastorage.initialize("mystorage", { storage: [],
+				      priviliges: { read: ["view"],
+						    append: ["modify"],
+						    modify: ["modify"] } }, true);
 
 
 // Push callbacks to framework

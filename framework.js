@@ -317,7 +317,7 @@ function processValidateAccountMessage(data) {
 	return restStatusMessage("E_VERIFY");
     } else {
     	servicelog("Validation code: " + JSON.stringify(data));
-	var request = validatePendingRequest(data.email.toString());
+	var request = validatePendingRequestByMail(data.email.toString());
 	if(request === false) {
 	    servicelog("Failed to validate pending request");
 	    return restStatusMessage("E_VERIFY");
@@ -364,7 +364,8 @@ function sendUserAccountModificationDialog(account, key, loggedin, session) {
     configurationItems.push([ [ ui.createUiTextNode("phone", ui.getLanguageText(session, "TERM_PHONE")) ],
 			      [ ui.createUiInputField("phoneInput", account.phone, 15, false) ] ]);
     configurationItems.push([ [ ui.createUiTextNode("language", ui.getLanguageText(session, "TERM_LANGUAGE")) ],
-			      [ ui.createUiSelectionList("languageInput", runCallbackByName("datastorageRead" ,"language").languages, account.language, true, false, false) ] ]);
+			      [ ui.createUiSelectionList("languageInput", runCallbackByName("datastorageRead" ,"language").
+							 language.languages, account.language, true, false, false) ] ]);
     configurationItems.push([ [ ui.createUiTextNode("password1", ui.getLanguageText(session, "TERM_PASSWORD")) ],
 			      [ ui.createUiInputField("passwordInput1", "", 15, true) ] ]);
     configurationItems.push([ [ ui.createUiTextNode("password2", ui.getLanguageText(session, "TERM_REPEATPASSWORD")) ],
@@ -406,8 +407,8 @@ function sendUserAccountModificationDialog(account, key, loggedin, session) {
 function createLoggedinUserAccountChange(session) {
     // user account modification fakes an email verification sequence
     var user = getUserByUsername(session.username);
-    var request = createPendingRequest(user.email, true);
-    request = validatePendingRequest(request.token.mail);
+    var request = createPendingRequestUsingUsernameKey(user.username);
+    request = validatePendingRequestByKey(request.token.key);
     request = getValidatedPendingRequest(request.checksum);
     var account = { checksum: request.checksum,
 		    isNewAccount: false,
@@ -512,7 +513,7 @@ function sendAdminDialog(session) {
 			 [ ui.createUiInputField("email", u.email, 20) ],
 			 [ ui.createUiInputField("phone", u.phone, 10) ],
 			 [ ui.createUiSelectionList("language", runCallbackByName("datastorageRead" ,"language").
-						    languages, u.language, true, false, false) ],
+						    language.languages, u.language, true, false, false) ],
 			 userPriviliges,
 		         [ ui.createUiMessageButton("Change", "/api/changepassword/", u.username),
 			   ui.createUiInputField("password", "", 10, true) ] ] )
@@ -542,11 +543,11 @@ function sendAdminDialog(session) {
 					 [ ui.createUiInputField("email", "<email>", 20) ],
 					 [ ui.createUiInputField("phone", "<phone>", 10) ],
 					 [ ui.createUiSelectionList("language", runCallbackByName("datastorageRead" ,"language").
-								    languages, runCallbackByName("datastorageRead", "main").
+								    language.languages, runCallbackByName("datastorageRead", "main").
 								    main.defaultLanguage, true, false, false) ],
 					 emptyPriviligeList,
 					 [ ui.createUiTextNode("password", "") ] ] };
-	var email = runCallbackByName("datastorageRead", "email");
+	var email = runCallbackByName("datastorageRead", "email").email;
 	var emailEnabled = runCallbackByName("datastorageRead", "main").main.emailVerification;
 	var emailConfigPanel = { title: ui.getLanguageText(session, "PROMPT_EMAILADMIN"),
 				 frameId: 1,
@@ -645,7 +646,7 @@ function processAdminAccountChangeMessage(data) {
     if(runCallbackByName("datastorageWrite", "main", { main: main }) === false) {
 	servicelog("Main database write failed");
     }
-    var emailPassword = runCallbackByName("datastorageRead", "email").password;
+    var emailPassword = runCallbackByName("datastorageRead", "email").email.password;
     var newEmailSettings = { host: emailSettings.host,
 			     user: emailSettings.user,
 			     sender: emailSettings.sender,
@@ -655,7 +656,7 @@ function processAdminAccountChangeMessage(data) {
     if(newEmailSettings.password === "") {
 	newEmailSettings.password = emailPassword;
     }
-    if(runCallbackByName("datastorageWrite", "email", newEmailSettings) === false) {
+    if(runCallbackByName("datastorageWrite", "email", { email: newEmailSettings }) === false) {
 	servicelog("Email database write failed");
     }
     servicelog("Updated User database.");
@@ -800,6 +801,7 @@ function processUserAccountRequest(data) {
 
 
 // configuration requests
+// by default these interfaces are allowed only to be used by admin
 
 function processConfigRequest(url, data) {
     var session = refreshSessionByToken(data.token, data.data);
@@ -958,7 +960,7 @@ function getNewSessionKey() {
 // email handling functions
 
 function sendVerificationEmail(recipientAddress) {
-    var request = createPendingRequest(recipientAddress, false);
+    var request = createPendingRequestUsingEmailKey(recipientAddress);
     if(!request) {
 	servicelog("Failed to create pending request");
 	return { result: restStatusMessage("E_INTERNALERROR"),
@@ -977,14 +979,14 @@ function sendVerificationEmail(recipientAddress) {
 					  request.token.mail + request.token.key);
     }
     var mailDetails = { text: emailBody,
-			from: runCallbackByName("datastorageRead", "email").sender,
+			from: runCallbackByName("datastorageRead", "email").email.sender,
 			to: recipientAddress,
 			subject: emailSubject };
     sendEmail(mailDetails, "account verification");
 }
 
 function sendEmail(emailDetails, logLine) {
-    var emailData = runCallbackByName("datastorageRead", "email");
+    var emailData = runCallbackByName("datastorageRead", "email").email;
     if(emailData.blindlyTrust) {
 	servicelog("Trusting self-signed certificates");
 	process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -1026,7 +1028,7 @@ function sendConfirmationEmails(account) {
 					    applicationName);
     }
     var mailDetails = { text: emailBody,
-			from: runCallbackByName("datastorageRead", "email").sender,
+			from: runCallbackByName("datastorageRead", "email").email.sender,
 			to: account.email,
 			subject: emailSubject };
     sendEmail(mailDetails, "account confirmation");
@@ -1034,7 +1036,7 @@ function sendConfirmationEmails(account) {
 	if(userHasPrivilige("system-admin", u)) { return u.email; }
     }).filter(function(f){return f;}).forEach(function(m) {
 	var mailDetails = { text: adminEmailBody,
-			    from: runCallbackByName("datastorageRead", "email").sender,
+			    from: runCallbackByName("datastorageRead", "email").email.sender,
 			    to: m,
 			    subject: adminEmailSubject };
 	sendEmail(mailDetails, "admin confirmation");
@@ -1044,9 +1046,9 @@ function sendConfirmationEmails(account) {
 
 // Pending list handling
 
-function createPendingRequest(emailAddress, loggedIn) {
-    removePendingRequest(emailAddress);
-    var pendingData = runCallbackByName("datastorageRead", "pending");
+function createPendingRequestUsingEmailKey(emailAddress) {
+    removePendingRequestUsingEmailKey(emailAddress);
+    var pendingData = runCallbackByName("datastorageRead", "pending").pending;
     var timeout = new Date();
     var emailToken =  { mail: sha1.hash(emailAddress).slice(0, 8),
 			key: sha1.hash(globalSalt + JSON.stringify(new Date().getTime())).slice(0, 16) };
@@ -1059,12 +1061,12 @@ function createPendingRequest(emailAddress, loggedIn) {
 		    username: username,
                     token: emailToken,
                     date: timeout.getTime(),
-		    loggedIn: loggedIn,
+		    loggedIn: false,
 		    state: "pending" };
     var checksum = sha1.hash(JSON.stringify(request));
     request.checksum = checksum;
-    pendingData.pending.push(request);
-    if(runCallbackByName("datastorageWrite", "pending", pendingData) === false) {
+    pendingData.push(request);
+    if(runCallbackByName("datastorageWrite", "pending", { pending: pendingData }) === false) {
 	servicelog("Pending database write failed");
 	return false;
     } else {
@@ -1073,21 +1075,49 @@ function createPendingRequest(emailAddress, loggedIn) {
     }
 }
 
-function removePendingRequest(emailAdress) {
-    var pendingUserData = runCallbackByName("datastorageRead", "pending");
-    if(Object.keys(pendingUserData.pending).length === 0) {
+function createPendingRequestUsingUsernameKey(username) {
+    var user = getUserByUsername(username);
+    if(!user) { return false }
+    removePendingRequestUsingUsernameKey(username);
+    var pendingData = runCallbackByName("datastorageRead", "pending").pending;
+    var timeout = new Date();
+    var emailToken =  { mail: sha1.hash(user.email).slice(0, 8),
+			key: sha1.hash(globalSalt + JSON.stringify(new Date().getTime())).slice(0, 16) };
+    timeout.setMinutes(timeout.getMinutes() + 10);
+    var request = { email: user.email,
+		    isNewAccount: false,
+		    username: username,
+                    token: emailToken,
+                    date: timeout.getTime(),
+		    loggedIn: true,
+		    state: "pending" };
+    var checksum = sha1.hash(JSON.stringify(request));
+    request.checksum = checksum;
+    pendingData.push(request);
+    if(runCallbackByName("datastorageWrite", "pending", { pending: pendingData }) === false) {
+	servicelog("Pending database write failed");
+	return false;
+    } else {
+	servicelog("Created pending request");
+	return request;
+    }
+}
+
+function removePendingRequestUsingEmailKey(emailAdress) {
+    var pendingUserData = runCallbackByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingUserData).length === 0) {
 	servicelog("Empty pending requests database, bailing out");
 	return;
     }
-    if(pendingUserData.pending.filter(function(u) {
+    if(pendingUserData.filter(function(u) {
 	return u.email === emailAdress;
     }).length !== 0) {
 	servicelog("Removing existing entry from pending database");
-	var newPendingUserData = { pending: [] };
-	newPendingUserData.pending = pendingUserData.pending.filter(function(u) {
+	var newPendingUserData = [];
+	newPendingUserData = pendingUserData.filter(function(u) {
             return u.email !== emailAdress;
 	});
-	if(runCallbackByName("datastorageWrite", "pending", newPendingUserData) === false) {
+	if(runCallbackByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
             servicelog("Pending requests database write failed");
 	}
     } else {
@@ -1095,7 +1125,29 @@ function removePendingRequest(emailAdress) {
     }
 }
 
-function validatePendingRequest(emailHash) {
+function removePendingRequestUsingUsernameKey(username) {
+    var pendingUserData = runCallbackByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingUserData).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return;
+    }
+    if(pendingUserData.filter(function(u) {
+	return u.username === username;
+    }).length !== 0) {
+	servicelog("Removing existing entry from pending database");
+	var newPendingUserData = [];
+	newPendingUserData = pendingUserData.filter(function(u) {
+            return u.username !== username;
+	});
+	if(runCallbackByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
+            servicelog("Pending requests database write failed");
+	}
+    } else {
+	servicelog("no existing entries in pending database");
+    }
+}
+
+function validatePendingRequestByMail(emailHash) {
     var pendingUserData = runCallbackByName("datastorageRead", "pending").pending;
     if(Object.keys(pendingUserData).length === 0) {
 	servicelog("Empty pending requests database, bailing out");
@@ -1115,6 +1167,35 @@ function validatePendingRequest(emailHash) {
     target[0].state = "validated";
     var newPendingUserData = pendingUserData.filter(function(u) {
 	return u.token.mail !== emailHash.slice(0, 8);
+    });
+    newPendingUserData.push(target[0]);
+    if(runCallbackByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
+	servicelog("Pending requests database write failed");
+    }
+    servicelog("Validated pending request");
+    return target[0];
+}
+
+function validatePendingRequestByKey(key) {
+    var pendingUserData = runCallbackByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingUserData).length === 0) {
+	servicelog("Empty pending requests database, bailing out");
+	return false;
+    }
+    var target = pendingUserData.filter(function(u) {
+	return u.token.key === key;
+    });
+    if(target.length === 0) {
+	servicelog("Cannot find a pending request");
+	return false;
+    }
+    if(target[0].state != "pending") {
+	servicelog("Cannot validate a pending request in wrong state");
+	return false;
+    }
+    target[0].state = "validated";
+    var newPendingUserData = pendingUserData.filter(function(u) {
+	return u.token.key !== key;
     });
     newPendingUserData.push(target[0]);
     if(runCallbackByName("datastorageWrite", "pending", { pending: newPendingUserData }) === false) {
@@ -1169,25 +1250,25 @@ function commitPendingRequest(checksum) {
 
 setInterval(function() {
     var now = new Date().getTime();
-    var pendingData = runCallbackByName("datastorageRead", "pending");
-    if(Object.keys(pendingData.pending).length === 0) {
+    var pendingData = runCallbackByName("datastorageRead", "pending").pending;
+    if(Object.keys(pendingData).length === 0) {
 	servicelog("No pending requests to purge");
 	return;
     }
     var purgeCount = 0
-    var newPendingData = { pending: [] };
-    pendingData.pending.forEach(function(p) {
+    var newPendingData = [];
+    pendingData.forEach(function(p) {
 	if(p.date < now) {
 	    purgeCount++;
 	} else {
-	    newPendingData.pending.push(p);
+	    newPendingData.push(p);
 	}
     });
     if(purgeCount === 0) {
 	servicelog("No pending requests timeouted");
 	return;
     } else {
-	if(runCallbackByName("datastorageWrite", "pending", newPendingData) === false) {
+	if(runCallbackByName("datastorageWrite", "pending", { pending: newPendingData }) === false) {
 	    servicelog("Pending requests database write failed");
 	} else {
 	    servicelog("Removed " + purgeCount + " timeouted pending requests");
@@ -1199,7 +1280,7 @@ setInterval(function() {
 // session list handling
 
 function createSession(key, username, token, serial) {
-    var sessionData = runCallbackByName("datastorageRead", "session");
+    var sessionData = runCallbackByName("datastorageRead", "session").session;
     var timeout = new Date();
     timeout.setMinutes(timeout.getMinutes() + 10);
     var request = { key: key,
@@ -1207,8 +1288,8 @@ function createSession(key, username, token, serial) {
 		    date: timeout,
 		    serial: serial,
 		    username: username }
-    sessionData.session.push(request);
-    if(runCallbackByName("datastorageWrite", "session", sessionData) === false) {
+    sessionData.push(request);
+    if(runCallbackByName("datastorageWrite", "session", { session: sessionData }) === false) {
 	servicelog("Session database write failed");
 	return false;
     } else {
@@ -1269,7 +1350,7 @@ function deleteSessionByToken(token, data) {
     runCallbackByName("datastorageRead", "session").session.forEach(function(s) {
 	if(s.token !== token) { newSessionData.push(s); }
     });
-    if(runCallbackByName("datastorageWrite", "session", {session: newSessionData}) === false) {
+    if(runCallbackByName("datastorageWrite", "session", { session: newSessionData }) === false) {
 	servicelog("Session database write failed");
 	return false;
     } else {
@@ -1280,25 +1361,25 @@ function deleteSessionByToken(token, data) {
 
 setInterval(function() {
     var now = new Date().getTime();
-    var sessionData = runCallbackByName("datastorageRead", "session");
-    if(Object.keys(sessionData.session).length === 0) {
+    var sessionData = runCallbackByName("datastorageRead", "session").session;
+    if(Object.keys(sessionData).length === 0) {
 	servicelog("No sessions to purge");
 	return;
     }
     var purgeCount = 0
-    var newSessionData = { session: [] };
-    sessionData.session.forEach(function(s) {
+    var newSessionData = [];
+    sessionData.forEach(function(s) {
 	if(s.date < now) {
 	    purgeCount++;
 	} else {
-	    newSessionData.session.push(s);
+	    newSessionData.push(s);
 	}
     });
     if(purgeCount === 0) {
 	servicelog("No sessions timeouted");
 	return;
     } else {
-	if(runCallbackByName("datastorageWrite", "session", newSessionData) === false) {
+	if(runCallbackByName("datastorageWrite", "session", { session: newSessionData }) === false) {
 	    servicelog("Session database write failed");
 	} else {
 	    servicelog("Removed " + purgeCount + " timeouted sessions");
@@ -1311,28 +1392,29 @@ setInterval(function() {
 
 function initializeDataStorages() {
     runCallbackByName("datastorageInitialize", "main", { main: { version: 1,
-								port: 8080,
-								siteFullUrl: "http://url.to.my.site/",
-								emailVerification: false,
-								defaultLanguage: "english" } });
+								 port: 8080,
+								 siteFullUrl: "http://url.to.my.site/",
+								 emailVerification: false,
+								 defaultLanguage: "english" } });
     runCallbackByName("datastorageInitialize", "users", { users: [ { username: "test",
-								    hash: sha1.hash("test"),
-								    password: getPasswordHash("test", "test"),
-								    applicationData: { priviliges: ["system-admin"] },
-								    realname: "",
-								    email: "",
-								    phone: "",
-								    language: runCallbackByName("datastorageRead",
-											       "main").main.defaultLanguage } ] }, true);
+								     hash: sha1.hash("test"),
+								     password: getPasswordHash("test", "test"),
+								     applicationData: { priviliges: ["system-admin"] },
+								     realname: "",
+								     email: "",
+								     phone: "",
+								     language: runCallbackByName("datastorageRead",
+												 "main").main.defaultLanguage } ] }, true);
     runCallbackByName("datastorageInitialize", "session", { session: [] });
     runCallbackByName("datastorageInitialize", "pending", { pending: [] }, true);
-    runCallbackByName("datastorageInitialize", "email", { host: "smtp.your-email.com",
-							 user: "username",
-							 password: "password",
-							 sender: "you <username@your-email.com>",
-							 ssl: true,
-							 blindlyTrust: true });
-    runCallbackByName("datastorageInitialize", "language", { languages: [], dictionary: [] });
+    runCallbackByName("datastorageInitialize", "email", { email: { host: "smtp.your-email.com",
+								   user: "username",
+								   password: "password",
+								   sender: "you <username@your-email.com>",
+								   ssl: true,
+								   blindlyTrust: true } });
+    runCallbackByName("datastorageInitialize", "language", { language: { languages: [],
+									 dictionary: [] }});
 
     // sessions are cleared between restarts
     runCallbackByName("datastorageWrite", "session", { session: [] });
@@ -1360,7 +1442,7 @@ function runCallbackByName(name, par1, par2, par3, par4, par5) {
 
 function startUiLoop() {
     initializeDataStorages();
-    if(runCallbackByName("datastorageRead", "language").languages.length === 0) {
+    if(runCallbackByName("datastorageRead", "language").language.languages.length === 0) {
 	servicelog("ERROR: Missing language definition file!");
 	servicelog("Copy the 'language.json' file from framework to './configuration/' directory!");
 	servicelog("Exiting program.");
