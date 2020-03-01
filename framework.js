@@ -49,7 +49,7 @@ function restStatusMessage(status) {
 
 var webServer = http.createServer(function(request, response){    
     request.on('data', function(textBuffer) {
-	try {
+//	try {
 	    if(request.method === "POST") {
 //		servicelog("---------------> " + textBuffer)
 //		servicelog("---------------> " + request.url)
@@ -62,7 +62,7 @@ var webServer = http.createServer(function(request, response){
 		response.write(JSON.stringify(res, null, 4));
 		response.end();
 	    }
-	} catch(err) {
+/*	} catch(err) {
 	    servicelog("Received illegal api call: " + err);
 	    response.writeHeader(200, { "Content-Type": "text/html",
 					"X-Frame-Options": "deny",
@@ -70,7 +70,7 @@ var webServer = http.createServer(function(request, response){
 					"X-Content-Type-Options": "nosniff" });
 	    response.write(JSON.stringify({result: restStatusMessage("E_FORMAT")}, null, 4))
 	    response.end();
-	}
+	} */
     });
     if(request.method === "GET") {
 	// api calls do not request client    
@@ -1287,7 +1287,8 @@ function createSession(key, username, token, serial) {
 		    token: token,
 		    date: timeout,
 		    serial: serial,
-		    username: username }
+		    username: username,
+		    data: {} }
     sessionData.push(request);
     if(runCallbackByName("datastorageWrite", "session", { session: sessionData }) === false) {
 	servicelog("Session database write failed");
@@ -1357,6 +1358,28 @@ function deleteSessionByToken(token, data) {
 	servicelog("Deleted session");
 	return true;
     }
+}
+
+function addSessionData(token, data) {
+    var session = getSessionByToken(token);
+    if(!session) { return false }
+    session.data = data;
+    var newSessionData = [];
+    runCallbackByName("datastorageRead", "session").session.forEach(function(s) {
+	if(s.token !== token) { newSessionData.push(s); }
+    });
+    newSessionData.push(session);
+    if(runCallbackByName("datastorageWrite", "session", { session: newSessionData }) === false) {
+	servicelog("Session database write failed");
+	return false;
+    }
+    return session;
+}
+
+function getSessionData(token) {
+    var session = getSessionByToken(token);
+    if(!session) { return false }
+    return session.data;
 }
 
 setInterval(function() {
@@ -1466,6 +1489,9 @@ module.exports.runCallbackByName = runCallbackByName;
 module.exports.getUserByUsername = getUserByUsername;
 module.exports.userHasPrivilige = userHasPrivilige;
 module.exports.refreshSessionByToken = refreshSessionByToken;
+module.exports.addSessionData = addSessionData;
+module.exports.getSessionData = getSessionData;
+
 /*
 module.exports.createUiTextNode = createUiTextNode;
 module.exports.createUiTextArea = createUiTextArea;
