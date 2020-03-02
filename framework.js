@@ -104,7 +104,7 @@ var webServer = http.createServer(function(request, response){
 function handleRestMessage(url, postData) {
 //    servicelog('got data: ' + JSON.stringify(postData));
 //    servicelog("got request: " + JSON.stringify(url));
-    
+
     if(url === "/") {
 	return {result: restStatusMessage("E_FORMAT")};
     }
@@ -156,11 +156,6 @@ function handleRestMessage(url, postData) {
 	return processUserAccountRequest(postData);
     }
     
-    if(url.split("/")[2] === "xyzzy") {
-	servicelog('got data: ' + JSON.stringify(postData));
-	return Rest(postData);
-    }
-    
     if(url.split("/")[2] === "window") {    
 	if(url.split("/")[3] === "0") {
 	    var session = refreshSessionByToken(postData.token, postData.data);
@@ -177,6 +172,11 @@ function handleRestMessage(url, postData) {
 
     if(url.split("/")[2] === "config") {
 	return processConfigRequest(url, postData)
+    }
+
+    // Application handles poll requests
+    if(url.split("/")[2] === "poll") {
+	return runCallbackByName("handleApplicationPoll", url, postData);
     }
 
     // call that are not caught by framework are handled by application

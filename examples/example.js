@@ -20,6 +20,13 @@ function handleApplicationMessage(url, message) {
     return {result: framework.restStatusMessage("E_UNIMPLEMENTED")};
 }
 
+function handleApplicationPoll(url, message) {
+    var session = framework.refreshSessionByToken(message.token, message.data);
+    if(!session) { return {result: framework.restStatusMessage("E_VERIFYSESSION")}; }
+    var data = framework.decrypt(message.data, session.key);
+    // application can do something with the data
+    return {result: framework.restStatusMessage("E_OK")};
+}
 
 // Administration UI panel requires application to provide needed priviliges
 // These can be used when restricting users for certain database operations etc.
@@ -160,6 +167,7 @@ framework.setCallback("datastorageRead", datastorage.read);
 framework.setCallback("datastorageWrite", datastorage.write);
 framework.setCallback("datastorageInitialize", datastorage.initialize);
 framework.setCallback("handleApplicationMessage", handleApplicationMessage);
+framework.setCallback("handleApplicationPoll", handleApplicationPoll);
 framework.setCallback("processResetToMainState", processResetToMainState);
 framework.setCallback("createAdminPanelUserPriviliges", createAdminPanelUserPriviliges);
 framework.setCallback("createDefaultPriviliges", createDefaultPriviliges);

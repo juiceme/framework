@@ -1,8 +1,8 @@
 var site = window.location.hostname;
 var connectionTimerId;
-var sessionToken;
-var sessionKey;
-var sessionSerial;
+var sessionToken = "";
+var sessionKey = "";
+var sessionSerial = "";
 
 if(window.NodeList && !NodeList.prototype.forEach) {
     NodeList.prototype.forEach = function(callback, thisArg) {
@@ -45,6 +45,13 @@ function postEncrypted(url, data) {
 function displayMessage(message) {
     document.getElementById("myStatusField").value = message;
 }
+
+setInterval(function() {
+    // if loggedin, poll server every 10 seconds
+    if(sessionKey !== "") {
+	postEncrypted('/api/poll', {});
+    }
+}, 1000*10);
 
 // this requests the login screen with a REST call
 postData("/api/start", {});
