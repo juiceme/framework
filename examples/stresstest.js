@@ -45,11 +45,11 @@ mySocket.on('connect', function(connection) {
 	}
 
     });
-    
+
     if (connection.connected) {
 	myConnection = connection;
 	var sendable = {type:"clientStarted", content:"none"};
-	myConnection.send(JSON.stringify(sendable));      
+	myConnection.send(JSON.stringify(sendable));
     }
 });
 
