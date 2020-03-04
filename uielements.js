@@ -65,7 +65,7 @@ function createTopButtons(session, additionalButtonList, adminRequest) {
 			    text: "Log Out",
 			    callbackFunction: "postEncrypted('/api/logout', {}); return false;" } ];
     framework.runCallbackByName("createTopButtonList").forEach(function(b) {
-	var flag = false; 
+	var flag = false;
 	b.priviliges.forEach(function(p) {
 	    if(framework.userHasPrivilige(p, framework.getUserByUsername(session.username))) { flag = true; }
 	});

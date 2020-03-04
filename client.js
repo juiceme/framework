@@ -54,7 +54,7 @@ setInterval(function() {
 
 // this requests the login screen with a REST call
 postData("/api/start", {});
-connectionTimerId = setTimeout(function() { 
+connectionTimerId = setTimeout(function() {
     document.getElementById("myStatusField").value = "No connection to server";
 }, 2000);
 
@@ -155,7 +155,7 @@ function createUiPage(inputData) {
 	    fieldset.appendChild(document.createElement('br'));
 	}
     });
-   
+
     fieldset.appendChild(document.createElement('br'));
     if(inputData.buttonList !== undefined) {
 	fieldset.appendChild(createAcceptButtons(inputData));
@@ -226,7 +226,7 @@ function createEditableItemList(id, inputData, frame) {
 function createTopButtons(inputData) {
     var table = document.createElement('table');
     var tableBody = document.createElement('tbody');
-    var tableRow = tableBody.insertRow();    
+    var tableRow = tableBody.insertRow();
 
     if(inputData.topButtonList !== undefined) {
 	inputData.topButtonList.forEach(function(b) {

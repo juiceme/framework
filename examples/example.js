@@ -7,7 +7,7 @@ var ui = require('./framework/uielements.js');
 function handleApplicationMessage(url, message) {
     console.log("URL: " +  url)
     var session = framework.refreshSessionByToken(message.token, message.data);
-    if(!session) { return {result: framework.restStatusMessage("E_VERIFYSESSION")}; } 
+    if(!session) { return {result: framework.restStatusMessage("E_VERIFYSESSION")}; }
     if(url === "/api/application/pushme") {
 	return processPushMeButtonAction(session, message.data); }
     if(url === "/api/application/help") {
@@ -58,7 +58,7 @@ function createTopButtonList() {
 // Show up Main UI panel
 
 function processResetToMainState(session) {
-    // this shows up the first UI panel when uses login succeeds or other panels send "OK" / "Cancel" 
+    // this shows up the first UI panel when uses login succeeds or other panels send "OK" / "Cancel"
     framework.servicelog("User session reset to main state");
     return createMainUiPanel(session);
 }

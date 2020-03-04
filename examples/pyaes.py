@@ -104,7 +104,7 @@ def key_expansion(key):
         else:
             if Nk > 6 and i%Nk == 4:
                 temp = sub_word(temp)
-        for t in range(4):    
+        for t in range(4):
             w[i][t] = w[i-Nk][t] ^ temp[t]
     return w
 
@@ -123,7 +123,7 @@ def aes_cipher(input, w):
     state = sub_bytes(state, Nb)
     state = shift_rows(state, Nb)
     state = add_round_key(state, w, Nr, Nb)
-    output = []                            
+    output = []
     for i in range(4*Nb):
         output.append(0)
     for i in range(4*Nb):

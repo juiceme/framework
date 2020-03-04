@@ -47,7 +47,7 @@ function restStatusMessage(status) {
     return {result:status, text:text};
 }
 
-var webServer = http.createServer(function(request, response){    
+var webServer = http.createServer(function(request, response){
     request.on('data', function(textBuffer) {
 //	try {
 	    if(request.method === "POST") {
@@ -73,7 +73,7 @@ var webServer = http.createServer(function(request, response){
 	} */
     });
     if(request.method === "GET") {
-	// api calls do not request client    
+	// api calls do not request client
 	var clienthead = fs.readFileSync("./framework/clienthead", "utf8");
 	var variables = getClientVariables();
 	var clientbody = fs.readFileSync("./framework/client.js", "utf8");
@@ -116,19 +116,19 @@ function handleRestMessage(url, postData) {
     if(url.split("/")[2] === "login") {
 	return processUserLogin(postData);
     }
-    
+
     if(url.split("/")[2] === "logout") {
 	return processUserLogout(postData);
     }
-    
+
     if(url.split("/")[2] === "passwordrecovery") {
 	return processCreateOrModifyAccount(postData);
     }
-    
+
     if(url.split("/")[2] === "sendpasswordemail") {
 	return processAccountRequestMessage(postData);
     }
-    
+
     if(url.split("/")[2] === "validateaccount") {
 	return processValidateAccountMessage(postData);
     }
@@ -151,12 +151,12 @@ function handleRestMessage(url, postData) {
     if(url.split("/")[2] === "changepassword") {
 	return processChangeUserPasswordMessage(postData);
     }
-    
+
     if(url.split("/")[2] === "useraccountpanel") {
 	return processUserAccountRequest(postData);
     }
-    
-    if(url.split("/")[2] === "window") {    
+
+    if(url.split("/")[2] === "window") {
 	if(url.split("/")[3] === "0") {
 	    var session = refreshSessionByToken(postData.token, postData.data);
 	    if(!session) {
@@ -342,7 +342,7 @@ function processValidateAccountMessage(data) {
 	    newAccount.language = user.language;
 	}
 	return sendUserAccountModificationDialog(newAccount, request.token.key, false, null);
-    }    
+    }
 }
 
 function sendUserAccountModificationDialog(account, key, loggedin, session) {
@@ -389,7 +389,7 @@ function sendUserAccountModificationDialog(account, key, loggedin, session) {
     } else {
 	var callbackFunction = "var userData=[{ key:'isNewAccount', value:" + account.isNewAccount + " }]; document.querySelectorAll('input').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, value:i.value } ); } }); document.querySelectorAll('select').forEach(function(i){ if(i.key != undefined) { userData.push({ key:i.key, selected:i.options[i.selectedIndex].item } ); } }); postData('/api/useraccountchange', { checksum: '" + account.checksum + "', data: Aes.Ctr.encrypt(JSON.stringify(userData), sessionKey, 128) }); return false;"
     }
-    
+
     var data = { type: "createUiPage",
                  content: { frameList: frameList,
 			    buttonList: [ { id: 501,
@@ -441,7 +441,7 @@ function processUserAccountChangeMessage(data, loggedin) {
 	    return {result: restStatusMessage("E_VERIFY")};
 	}
 	checkSum = accountData.data.checksum;
-	accountData = accountData.data.data;	
+	accountData = accountData.data.data;
     } else {
 	session = null;
 	var request = getValidatedPendingRequest(data.checksum);
@@ -566,7 +566,7 @@ function sendAdminDialog(session) {
 					    [ ui.createUiCheckBox("use_ssl", email.ssl, "use ssl") ] ],
 					  [ [ ui.createUiTextNode("blindly_trust", ui.getLanguageText(session, "TERM_BLINDLYTRUST")) ],
 					    [ ui.createUiCheckBox("blindly_trust", email.blindlyTrust, "blindly trust") ] ] ] };
-					
+
 	var frameList = [ { frameType: "editListFrame", frame: userListPanel },
 			  { frameType: "fixedListFrame", frame: emailConfigPanel } ];
 	var data = { type: "createUiPage",
@@ -585,7 +585,7 @@ function sendAdminDialog(session) {
     } else {
 	servicelog("User " + session.username + " does not have Sytem Administration priviliges!");
 	return { result: restStatusMessage("E_UNIMPLEMENTED") }
-    }	
+    }
 }
 
 function processAdminPanelRequest(data) {
@@ -730,7 +730,7 @@ function extractUserListFromInputData(data) {
 	    } else {
 		var priviligeList = createPriviligeList().map(function(p) {
 		    return p.privilige;
-		}); 
+		});
 	    	row.forEach(function(item) {
 		    priviligeList.forEach(function(p) {
 			if(item.key === p) {
@@ -1210,7 +1210,7 @@ function getValidatedPendingRequest(checksum) {
     if(Object.keys(pendingUserData).length === 0) {
 	servicelog("Empty pending requests database, bailing out");
 	return false;
-    } 
+    }
     var target = pendingUserData.filter(function(u) {
 	return u.checksum === checksum;
     });
@@ -1230,7 +1230,7 @@ function commitPendingRequest(checksum) {
     if(Object.keys(pendingUserData).length === 0) {
 	servicelog("Empty pending requests database, bailing out");
 	return false;
-    } 
+    }
     var target = pendingUserData.filter(function(u) {
 	return u.checksum === checksum;
     });
