@@ -49,7 +49,7 @@ function restStatusMessage(status) {
 
 var webServer = http.createServer(function(request, response){
     request.on('data', function(textBuffer) {
-//	try {
+	try {
 	    if(request.method === "POST") {
 //		servicelog("---------------> " + textBuffer)
 //		servicelog("---------------> " + request.url)
@@ -62,7 +62,7 @@ var webServer = http.createServer(function(request, response){
 		response.write(JSON.stringify(res, null, 4));
 		response.end();
 	    }
-/*	} catch(err) {
+	} catch(err) {
 	    servicelog("Received illegal api call: " + err);
 	    response.writeHeader(200, { "Content-Type": "text/html",
 					"X-Frame-Options": "deny",
@@ -70,7 +70,7 @@ var webServer = http.createServer(function(request, response){
 					"X-Content-Type-Options": "nosniff" });
 	    response.write(JSON.stringify({result: restStatusMessage("E_FORMAT")}, null, 4))
 	    response.end();
-	} */
+	}
     });
     if(request.method === "GET") {
 	// api calls do not request client
