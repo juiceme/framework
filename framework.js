@@ -1386,7 +1386,7 @@ setInterval(function() {
     var now = new Date().getTime();
     var sessionData = runCallbackByName("datastorageRead", "session").session;
     if(Object.keys(sessionData).length === 0) {
-	servicelog("No sessions to purge");
+//	servicelog("No sessions to purge");
 	return;
     }
     var purgeCount = 0

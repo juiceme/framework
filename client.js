@@ -22,7 +22,6 @@ function postData(restPath, data) {
 	if (xhr.readyState === 4 && xhr.status === 200) {
 	    try {
 		var data = JSON.parse(xhr.responseText);
-		console.log("JSON Data: " + JSON.stringify(data));
 		processRestReplyMessage(data);
 	    } catch(err) {
 		console.log("Received illegal api call: " + err);
@@ -95,9 +94,6 @@ function processRestReplyMessage(data) {
 	    serialKey = JSON.parse(Aes.Ctr.decrypt(data.serialKey, sessionKey, 128));
 	    sessionKey = serialKey.key;
 	    sessionSerial = serialKey.serial;
-	    console.log("sessionToken:  " + sessionToken);
-	    console.log("sessionKey:    " + sessionKey);
-	    console.log("sessionSerial: " + sessionSerial);
 	    postEncrypted("/api/window/0", {});
 	}
 	if(data.type === "T_UIWINDOWREQUEST") {
