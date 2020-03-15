@@ -107,6 +107,27 @@ function handleIncomingMessage(defragmentedMessage) {
 	document.body.replaceChild(createUiPage(defragmentedMessage.content),
 				   document.getElementById("myDiv2"));
     }
+
+    if(defragmentedMessage.type == "confirmBox") {
+	if (confirm(defragmentedMessage.content.confirmText)) {
+	    sendToServerEncrypted("confirmResponse", { confirmId: defragmentedMessage.content.confirmId,
+						       result: true });
+	    document.documentElement.scrollTop = 0;
+	} else {
+	    sendToServerEncrypted("confirmResponse", { confirmId: defragmentedMessage.content.confirmId,
+						       result: false });
+	}
+    }
+
+    if(defragmentedMessage.type == "pdfUpload") {
+	var pdfData = atob(defragmentedMessage.content);
+	window.open("data:application/pdf," + escape(pdfData));
+    }
+
+    if(defragmentedMessage.type == "zipUpload") {
+	var zipData = atob(defragmentedMessage.content);
+	window.open("data:application/zip," + escape(zipData));
+    }
 }
 
 
