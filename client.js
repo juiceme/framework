@@ -112,7 +112,6 @@ function handleIncomingMessage(defragmentedMessage) {
 	if (confirm(defragmentedMessage.content.confirmText)) {
 	    sendToServerEncrypted("confirmResponse", { confirmId: defragmentedMessage.content.confirmId,
 						       result: true });
-	    document.documentElement.scrollTop = 0;
 	} else {
 	    sendToServerEncrypted("confirmResponse", { confirmId: defragmentedMessage.content.confirmId,
 						       result: false });
@@ -127,6 +126,10 @@ function handleIncomingMessage(defragmentedMessage) {
     if(defragmentedMessage.type == "zipUpload") {
 	var zipData = atob(defragmentedMessage.content);
 	window.open("data:application/zip," + escape(zipData));
+    }
+
+    if(defragmentedMessage.type == "scrollToTop") {
+	window.scrollTo(0, 0);
     }
 }
 
