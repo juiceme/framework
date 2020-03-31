@@ -156,6 +156,13 @@ function createUiPage(inputData) {
 	    fieldset.appendChild(newEditableItemTable.table);
 	    fieldset.appendChild(document.createElement('br'));
 	}
+	if(f.frameType === "plainFrame") {
+	    fieldset.appendChild(document.createElement('br'));
+	    var newPlainFrame = createPlainFrame(id, inputData, f.frame);
+	    id = newPlainFrame.id;
+	    fieldset.appendChild(newPlainFrame.table);
+	    fieldset.appendChild(document.createElement('br'));
+	}
     });
     fieldset.appendChild(document.createElement('br'));
     if(inputData.buttonList !== undefined) {
@@ -220,6 +227,20 @@ function createEditableItemList(id, inputData, frame) {
     id = newTableItem.id;
     tableBody.appendChild(newTableItem.tableRow);
     table.appendChild(tableHeader);
+    table.appendChild(tableBody);
+    return { id: id, table: table };
+}
+
+function createPlainFrame(id, inputData, frame) {
+    var table = document.createElement('table');
+    var tableBody = document.createElement('tbody');
+    var count = 0;
+    frame.items.forEach(function(i) {
+	var newTableItem = createTableItem(id, count, inputData, i);
+	id = newTableItem.id;
+	tableBody.appendChild(newTableItem.tableRow);
+	if(frame.rowNumbers) { count++; }
+    });
     table.appendChild(tableBody);
     return { id: id, table: table };
 }

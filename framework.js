@@ -240,27 +240,29 @@ function processClientStarted(cookie) {
     cookie.challenge = "";
     cookie.incomingMessageBuffer = "";
     var items = [];
+    var buttonrow = [ [ createUiHtmlCell("", "") ],
+		      [ createUiFunctionButton(getLanguageText(null, "BUTTON_LOGIN"), "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); sendToServer('userLogin', { username: Sha1.hash(username) } ); return false;") ] ];
+    if(runCallbacByName("datastorageRead", "main").main.emailVerification) {
+	buttonrow = [ [ createUiHtmlCell("", "") ],
+		      [ createUiFunctionButton(getLanguageText(null, "BUTTON_LOGIN"), "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); sendToServer('userLogin', { username: Sha1.hash(username) } ); return false;"),
+			createUiFunctionButton(getLanguageText(null, "BUTTON_NEWACCOUNT"), "sessionPassword=''; sendToServer('createOrModifyAccount', {}); return false;") ] ];
+    }
     items.push([ [ createUiTextNode("username", getLanguageText(null, "TERM_USERNAME") + ":") ],
-		 [ createUiInputField("userNameInput", "", 15, false) ] ]);
+		 [ createUiInputField("userNameInput", "", 25, false) ] ]);
     items.push([ [ createUiTextNode("password", getLanguageText(null, "TERM_PASSWORD") + ":") ],
-		 [ createUiInputField("passwordInput", "", 15, true) ] ]);
+		 [ createUiInputField("passwordInput", "", 25, true) ] ]);
+    items.push(buttonrow);
     var itemList = { title: getLanguageText(null, "PROMPT_LOGIN"),
                      frameId: 0,
 		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
 		     rowNumbers: false,
                      items: items };
-    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
-    var buttonList = [ { id: 501,
-			 text: getLanguageText(null, "BUTTON_LOGIN"),
-			 callbackFunction: "var username=''; var password=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'userNameInput') { username = i.value; }; if(i.key === 'passwordInput') { password = i.value; }; }); sessionPassword=Sha1.hash(password + Sha1.hash(username).slice(0,4)); sendToServer('userLogin', { username: Sha1.hash(username) } ); return false;" } ];
-    if(runCallbacByName("datastorageRead", "main").main.emailVerification) {
-	buttonList.push({ id: 502,
-			  text: getLanguageText(null, "BUTTON_NEWACCOUNT"),
-			  callbackFunction: "sessionPassword=''; sendToServer('createOrModifyAccount', {}); return false;" });
-    }
+    var helptext = { frameId: 1,
+		     items: [ [ [ createUiHtmlCell("helptext", runCallbacByName("getLoginHelpText1", cookie) ) ] ] ] };
+    var frameList = [ { frameType: "fixedListFrame", frame: itemList },
+		      { frameType: "plainFrame", frame: helptext } ];
     var sendable = { type: "createUiPage",
-                     content: { frameList: frameList,
-				buttonList: buttonList } };
+                     content: { frameList: frameList } };
     sendPlainTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Login");
 }
@@ -325,17 +327,18 @@ function processCreateOrModifyAccount(cookie) {
     items.push([ [ createUiTextNode("verification", getLanguageText(null, "TERM_VERIFICATIONCODE") + ":" ) ],
 		 [ createUiInputField("verificationInput", "", 15, false) ],
 		 [ createUiFunctionButton(getLanguageText(null, "BUTTON_VALIDATEACCOUNT"), "var code=''; document.querySelectorAll('input').forEach(function(i){ if(i.key === 'verificationInput') { code = i.value; }; }); sessionPassword = code.slice(8,24); sendToServer('validateAccountMessage', { email: code.slice(0,8), challenge: Aes.Ctr.encrypt('clientValidating', sessionPassword, 128) });") ] ]);
+    items.push([ [ createUiFunctionButton(getLanguageText(null, "BUTTON_CANCEL"), "sessionPassword=''; sendToServer('clientStarted', {}); return false;") ] ]);
     var itemList = { title: getLanguageText(null, "PROMPT_CHANGEACCOUNT"),
                      frameId: 0,
 		     header: [ [ [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ], [ createUiHtmlCell("", "") ] ] ],
 		     rowNumbers: false,
                      items: items };
-    var frameList = [ { frameType: "fixedListFrame", frame: itemList } ];
+    var helptext = { frameId: 1,
+		     items: [ [ [ createUiHtmlCell("helptext", runCallbacByName("getLoginHelpText2", cookie) ) ] ] ] };
+    var frameList = [ { frameType: "fixedListFrame", frame: itemList },
+		      { frameType: "plainFrame", frame: helptext } ];
     var sendable = { type: "createUiPage",
-                     content: { frameList: frameList,
-				buttonList: [ { id: 501,
-						text: getLanguageText(null, "BUTTON_CANCEL"),
-						callbackFunction: "sessionPassword=''; sendToServer('clientStarted', {}); return false;" } ] } };
+                     content: { frameList: frameList } };
     sendPlainTextToClient(cookie, sendable);
     setStatustoClient(cookie, "Modify account");
 }

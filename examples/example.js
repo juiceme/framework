@@ -45,6 +45,17 @@ function createTopButtonList(cookie) {
 }
 
 
+// Help text to be shown in the main login panel
+
+function getLoginHelpText1(cookie) {
+    return "Login to the example application"
+}
+
+function getLoginHelpText2(cookie) {
+    return "Fancy stuff for using email to recover passwords"
+}
+
+
 // Show up Main UI panel
 
 function processResetToMainState(cookie, content) {
@@ -150,7 +161,8 @@ framework.setCallback("processResetToMainState", processResetToMainState);
 framework.setCallback("createAdminPanelUserPriviliges", createAdminPanelUserPriviliges);
 framework.setCallback("createDefaultPriviliges", createDefaultPriviliges);
 framework.setCallback("createTopButtonList", createTopButtonList);
-
+fw.setCallback("getLoginHelpText1", getLoginHelpText1);
+fw.setCallback("getLoginHelpText2", getLoginHelpText2);
 
 // Start the web interface
 
